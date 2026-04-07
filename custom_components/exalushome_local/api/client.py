@@ -7,6 +7,11 @@ import uuid
 from typing import Callable, Optional, Dict, Any
 
 try:
+    import aiohttp
+except ImportError:
+    aiohttp = None
+
+try:
     import websockets
 except ImportError:
     websockets = None
@@ -18,12 +23,30 @@ _LOGGER = logging.getLogger(__name__)
 # WebSocket protocol constants
 WEBSOCKET_RESOURCE_CONTROL = "/devices/device/control"
 WEBSOCKET_RESOURCE_STATE_CHANGED = "/info/devices/device/state/changed"
+WEBSOCKET_RESOURCE_LOGIN = "/users/user/login"
+WEBSOCKET_RESOURCE_DEVICES_LIST = "/devices/list"
 
 # IDataFrame method enum
 METHOD_GET = 0
 METHOD_POST = 1
 METHOD_DELETE = 2
 METHOD_PUT = 3
+
+# Status enum (from library DataFrame.Status)
+STATUS_OK = 0
+STATUS_UNKNOWN_ERROR = 1
+STATUS_FATAL_ERROR = 2
+STATUS_WRONG_DATA = 3
+STATUS_RESOURCE_NOT_EXISTS = 4
+STATUS_NO_PERMISSION = 5
+STATUS_SESSION_ALREADY_LOGGED = 6
+STATUS_OPERATION_NOT_PERMITTED = 7
+STATUS_NO_PERMISSIONS_TO_RESOURCE = 8
+STATUS_RESOURCE_NOT_AVAILABLE = 9
+STATUS_ERROR = 10
+STATUS_NO_DATA = 11
+STATUS_NOT_SUPPORTED_METHOD = 12
+STATUS_USER_NOT_LOGGED_IN = 13
 
 # State data types
 STATE_DATA_TYPE_BLIND_POSITION = "BlindPosition"
@@ -49,11 +72,13 @@ class ExalusLocalClient:
         self.websocket = None
         self._connected = False
         self._authorized = False
+        self._session_logged_in = False
         self._devices: Dict[str, Device] = {}
         self._state_callbacks = []
         self._connection_callbacks = []
         self._receive_task = None
         self._pending_responses: Dict[str, asyncio.Future] = {}  # TransactionId -> Future
+        self._session_login_event: Optional[asyncio.Event] = None
     
     @staticmethod
     def _normalize_host(host: str) -> str:
@@ -94,8 +119,11 @@ class ExalusLocalClient:
             True if connection successful and authorized
         """
         try:
+            # Step 1: HTTP authorization (local controller_info validation)
+            if not await self._authorize():
+                return False
+            
             # Build WebSocket URL with /api endpoint
-            # HTTP 200 error suggests wrong path - /api is typical for WebSocket APIs
             ws_url = f"ws://{self.host}:{self.port}/api"
             _LOGGER.debug(f"Attempting WebSocket connection to: {ws_url}")
             
@@ -106,19 +134,17 @@ class ExalusLocalClient:
             self.websocket = await websockets.connect(ws_url)
             self._connected = True
             _LOGGER.info(f"Connected to {self.host}:{self.port}")
-            _LOGGER.debug(f"WebSocket URL: {ws_url}")
             
             # Start receive loop
             self._receive_task = asyncio.create_task(self._receive_loop())
             
-            # Authorize
-            if await self._authorize():
-                self._authorized = True
-                self._notify_connection_changed(True)
-                return True
-            else:
+            # Step 2: Create session via /users/user/login
+            if not await self._create_session():
                 await self.disconnect()
                 return False
+            
+            self._notify_connection_changed(True)
+            return True
                 
         except Exception as e:
             _LOGGER.error(f"Connection failed: {e}")
@@ -129,6 +155,7 @@ class ExalusLocalClient:
     async def disconnect(self):
         """Disconnect from controller."""
         self._authorized = False
+        self._session_logged_in = False
         self._connected = False
         
         if self._receive_task:
@@ -150,32 +177,110 @@ class ExalusLocalClient:
         _LOGGER.info("Disconnected")
     
     async def _authorize(self) -> bool:
-        """Send authorization frame.
+        """Authorize using HTTP controller_info endpoint (local mode auth).
         
         Returns:
             True if authorization successful
+            
+        Library reference: LocalNetworkExalusConnectionService.js:195-226
+        - Calls HTTP GET http://{hostname}/controller_info
+        - Validates response == "{SerialNumber}:{PIN}"
         """
         try:
-            auth_frame = {
-                "TransactionId": str(uuid.uuid4()),
-                "Resource": "/system/authorize",
-                "Method": METHOD_POST,
-                "Data": {
-                    "SerialNumber": self.serial,
-                    "PIN": self.pin,
-                }
-            }
+            # Validate credentials via HTTP endpoint (local auth method)
+            http_url = f"http://{self.host}/controller_info"
+            _LOGGER.debug(f"Validating local controller via HTTP: {http_url}")
             
-            msg = json.dumps(auth_frame)
-            await self.websocket.send(msg)
-            _LOGGER.debug("Authorization frame sent")
-            return True
+            if aiohttp is None:
+                _LOGGER.error("aiohttp library not available for local auth")
+                return False
+            
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(http_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                        if resp.status != 200:
+                            _LOGGER.error(f"Controller info HTTP returned {resp.status}")
+                            return False
+                        
+                        response_text = await resp.text()
+                        expected = f"{self.serial}:{self.pin}"
+                        
+                        if response_text.strip() == expected:
+                            _LOGGER.debug(f"✓ Local controller_info validation successful: {self.serial}")
+                            self._authorized = True
+                            return True
+                        else:
+                            _LOGGER.error(f"Controller info mismatch. Expected '{expected}', got '{response_text.strip()}'")
+                            return False
+                            
+            except asyncio.TimeoutError:
+                _LOGGER.error("Local controller_info request timed out")
+                return False
+            except Exception as e:
+                _LOGGER.error(f"Local controller_info HTTP request failed: {e}")
+                return False
             
         except Exception as e:
             _LOGGER.error(f"Authorization failed: {e}")
             return False
     
-    async def _receive_loop(self):
+    async def _create_session(self) -> bool:
+        """Create session via /users/user/login WebSocket request.
+        
+        Returns:
+            True if session creation successful
+            
+        Library reference: LocalNetworkExalusConnectionService.js:264
+        - WaitForSessionCreationAsync prerequisite before any /devices/list request
+        - SessionService handles login via /users/user/login frame
+        """
+        if self._session_logged_in:
+            return True
+        
+        try:
+            transaction_id = str(uuid.uuid4())
+            
+            # Library uses LoginUserRequest with Method.Put
+            # For local mode without cloud credentials, send minimal login data
+            login_frame = {
+                "TransactionId": transaction_id,
+                "Resource": WEBSOCKET_RESOURCE_LOGIN,
+                "Method": METHOD_PUT,
+                "Data": {
+                    "Email": "local@exalushome.local",
+                    "Password": "local_pin"
+                }
+            }
+            
+            # Create future for response
+            response_future = asyncio.Future()
+            self._pending_responses[transaction_id] = response_future
+            
+            _LOGGER.debug("Sending session/login request to /users/user/login")
+            msg = json.dumps(login_frame)
+            await self.websocket.send(msg)
+            
+            # Wait for login response (library timeout: 15000ms)
+            try:
+                response = await asyncio.wait_for(response_future, timeout=10.0)
+            except asyncio.TimeoutError:
+                _LOGGER.error("Session login request timed out")
+                self._pending_responses.pop(transaction_id, None)
+                return False
+            
+            # Check response status
+            status = response.get("Status", STATUS_UNKNOWN_ERROR)
+            if status != STATUS_OK:
+                _LOGGER.error(f"Session login failed with Status {status}: {response.get('Data')}")
+                return False
+            
+            _LOGGER.debug("✓ Session/login created successfully")
+            self._session_logged_in = True
+            return True
+            
+        except Exception as e:
+            _LOGGER.error(f"Session creation failed: {e}")
+            return False
         """Receive loop for WebSocket messages."""
         try:
             while self._connected and self.websocket:
@@ -338,9 +443,15 @@ class ExalusLocalClient:
                 return this._devices;
             }
         """
-        if not self.is_connected or not self.is_authorized:
-            _LOGGER.error("Not connected or authorized")
+        if not self.is_connected:
+            _LOGGER.error("Not connected to controller")
             return {}
+        
+        if not self._session_logged_in:
+            _LOGGER.warning("Session not established, waiting for login...")
+            if not await self._create_session():
+                _LOGGER.error("Cannot create session, aborting device fetch")
+                return {}
         
         try:
             transaction_id = str(uuid.uuid4())
@@ -348,7 +459,7 @@ class ExalusLocalClient:
             # Send GetDevicesListRequest (exact endpoint confirmed from npm library)
             request_frame = {
                 "TransactionId": transaction_id,
-                "Resource": "/devices/list",
+                "Resource": WEBSOCKET_RESOURCE_DEVICES_LIST,
                 "Method": METHOD_GET,
             }
             
@@ -358,14 +469,23 @@ class ExalusLocalClient:
             
             msg = json.dumps(request_frame)
             await self.websocket.send(msg)
-            _LOGGER.debug("Device list request sent to /devices/list")
+            _LOGGER.debug(f"Device list request sent (TransactionId: {transaction_id})")
             
-            # Wait for response with timeout (npm uses 15000ms, we use 5s)
+            # Wait for response with timeout (npm uses 15000ms)
             try:
-                response = await asyncio.wait_for(response_future, timeout=5.0)
+                response = await asyncio.wait_for(response_future, timeout=10.0)
             except asyncio.TimeoutError:
-                _LOGGER.warning("Device list request timed out")
+                _LOGGER.error("Device list request timed out")
                 self._pending_responses.pop(transaction_id, None)
+                return {}
+            
+            # Check response status BEFORE accessing Data (library: DevicesService.js:777)
+            status = response.get("Status", STATUS_UNKNOWN_ERROR)
+            if status != STATUS_OK:
+                _LOGGER.error(
+                    f"Device list request failed: Status={status} "
+                    f"(USER_NOT_LOGGED_IN=13), Data={response.get('Data')}"
+                )
                 return {}
             
             # Parse response and convert to Device objects
@@ -399,15 +519,31 @@ class ExalusLocalClient:
         devices = {}
         
         try:
-            response_data = response.get("Data", [])
+            # Verify Status before accessing Data (library: DevicesService.js:777)
+            status = response.get("Status", STATUS_UNKNOWN_ERROR)
+            if status != STATUS_OK:
+                _LOGGER.error(
+                    f"Cannot parse device response: Status={status}, "
+                    f"expected Status.OK (0)"
+                )
+                return {}
+            
+            response_data = response.get("Data")
+            
+            # If Data is null/None, log clearly
+            if response_data is None:
+                _LOGGER.error("Device list response contains no data (Data=null)")
+                return {}
             
             # Handle both array and dict responses
             if isinstance(response_data, dict):
                 response_data = [response_data]
             
             if not isinstance(response_data, list):
-                _LOGGER.warning(f"Unexpected response format: {type(response_data)}")
+                _LOGGER.error(f"Unexpected response Data format: {type(response_data)}")
                 return {}
+            
+            _LOGGER.debug(f"Parsing {len(response_data)} device(s) from response")
             
             for device_obj in response_data:
                 try:
