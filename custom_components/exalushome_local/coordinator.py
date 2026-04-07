@@ -14,7 +14,7 @@ from homeassistant.helpers.update_coordinator import (
 
 from .api.client import ExalusLocalClient
 from .api.models import Device, DeviceChannel, ShutterDevice, ControlFeature, DeviceState
-from .const import DEFAULT_STATE_POLLING_INTERVAL, exalus_to_ha_position
+from .const import DEFAULT_STATE_POLLING_INTERVAL, exalus_to_ha_position, CONF_EMAIL, CONF_PASSWORD
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +28,8 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         host: str,
         serial: str,
         pin: str,
+        email: str = None,
+        password: str = None,
     ):
         """Initialize coordinator."""
         super().__init__(
@@ -37,7 +39,7 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=DEFAULT_STATE_POLLING_INTERVAL),
         )
         
-        self.client = ExalusLocalClient(host, serial, pin)
+        self.client = ExalusLocalClient(host, serial, pin, email, password)
         self._host = host
         self._serial = serial
         self._shutters: Dict[str, ShutterDevice] = {}

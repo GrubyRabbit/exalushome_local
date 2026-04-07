@@ -6,6 +6,8 @@ DOMAIN = "exalushome_local"
 CONF_HOST = "host"
 CONF_SERIAL = "serial"
 CONF_PIN = "pin"
+CONF_EMAIL = "email"
+CONF_PASSWORD = "password"
 
 # Default values
 DEFAULT_PORT = 81

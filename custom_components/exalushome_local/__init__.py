@@ -3,7 +3,7 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_EMAIL, CONF_PASSWORD
 
 PLATFORMS = ["cover"]
 
@@ -17,6 +17,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "host": entry.data.get("host"),
         "serial": entry.data.get("serial"),
         "pin": entry.data.get("pin"),
+        "email": entry.data.get("email"),
+        "password": entry.data.get("password"),
     }
     
     # Forward setup to platforms

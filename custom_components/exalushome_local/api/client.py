@@ -55,19 +55,23 @@ STATE_DATA_TYPE_BLIND_POSITION = "BlindPosition"
 class ExalusLocalClient:
     """WebSocket client for ExalusHome local connection."""
     
-    def __init__(self, host: str, serial: str, pin: str, port: int = 81):
+    def __init__(self, host: str, serial: str, pin: str, email: str = None, password: str = None, port: int = 81):
         """Initialize client.
         
         Args:
             host: Controller IP address (plain host/IP, no protocol prefix)
             serial: Controller serial number
             pin: Controller PIN
+            email: User email for session login (local mode)
+            password: User password for session login (local mode)
             port: WebSocket port (default 81)
         """
         # Normalize host: strip protocol prefixes and trailing slashes
         self.host = self._normalize_host(host)
         self.serial = serial
         self.pin = pin
+        self.email = email or "local@exalushome.local"  # Fallback to placeholder if not provided
+        self.password = password or "local_pin"  # Fallback to placeholder if not provided
         self.port = port
         self.websocket = None
         self._connected = False
@@ -241,14 +245,14 @@ class ExalusLocalClient:
             transaction_id = str(uuid.uuid4())
             
             # Library uses LoginUserRequest with Method.Put
-            # For local mode without cloud credentials, send minimal login data
+            # Uses real user email and password for session login
             login_frame = {
                 "TransactionId": transaction_id,
                 "Resource": WEBSOCKET_RESOURCE_LOGIN,
                 "Method": METHOD_PUT,
                 "Data": {
-                    "Email": "local@exalushome.local",
-                    "Password": "local_pin"
+                    "Email": self.email,
+                    "Password": self.password
                 }
             }
             
@@ -256,7 +260,7 @@ class ExalusLocalClient:
             response_future = asyncio.Future()
             self._pending_responses[transaction_id] = response_future
             
-            _LOGGER.debug("Sending session/login request to /users/user/login")
+            _LOGGER.debug(f"Sending session/login request to /users/user/login (email: {self.email})")
             msg = json.dumps(login_frame)
             await self.websocket.send(msg)
             
