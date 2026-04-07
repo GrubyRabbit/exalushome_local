@@ -14,7 +14,7 @@ from homeassistant.helpers.update_coordinator import (
 
 from .api.client import ExalusLocalClient
 from .api.models import Device, DeviceChannel, ShutterDevice, ControlFeature, DeviceState
-from .const import DEFAULT_STATE_POLLING_INTERVAL
+from .const import DEFAULT_STATE_POLLING_INTERVAL, exalus_to_ha_position
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,10 +107,51 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         return shutters
     
     async def _on_device_state_changed(self, state_data: Dict):
-        """Handle device state changed event from WebSocket."""
-        # TODO: Update local shutter state from event
-        # Trigger coordinator update
-        self.async_set_updated_data(self._shutters)
+        """Handle device state changed event from WebSocket.
+        
+        Args:
+            state_data: State change data containing:
+                - DeviceGuid: device GUID
+                - Channel: channel number
+                - state.Position: Exalus position (0=open, 100=closed)
+                - state.TaskExecution: task execution state
+        """
+        try:
+            device_guid = state_data.get("DeviceGuid")
+            channel = state_data.get("Channel")
+            state_info = state_data.get("state", {})
+            position_exalus = state_info.get("Position")
+            task_execution = state_info.get("TaskExecution", 0)
+            
+            if device_guid is None or channel is None:
+                _LOGGER.debug("Invalid state data: missing DeviceGuid or Channel")
+                return
+            
+            # Find matching shutter
+            unique_id = f"{device_guid}_{channel}"
+            if unique_id not in self._shutters:
+                _LOGGER.debug(f"Unknown shutter: {unique_id}")
+                return
+            
+            shutter = self._shutters[unique_id]
+            
+            # Update position if provided (convert from Exalus to HA scale)
+            if position_exalus is not None:
+                shutter.current_position = exalus_to_ha_position(position_exalus)
+            
+            # Update moving state
+            shutter.is_moving = task_execution != 0
+            
+            _LOGGER.debug(
+                f"Updated {unique_id}: position={shutter.current_position}, "
+                f"moving={shutter.is_moving}"
+            )
+            
+            # Trigger coordinator update to notify entities
+            self.async_set_updated_data(self._shutters)
+            
+        except Exception as e:
+            _LOGGER.error(f"Error processing state change: {e}")
     
     async def send_command(
         self,

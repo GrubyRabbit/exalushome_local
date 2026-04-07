@@ -134,8 +134,7 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         )
         
         if success:
-            # Update local state immediately (optimistic)
-            self._shutter.current_position = 100  # HA scale: 100 = open
+            # Mark as moving; wait for WebSocket state update for final position
             self._shutter.is_moving = True
             self.async_write_ha_state()
         else:
@@ -153,8 +152,7 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         )
         
         if success:
-            # Update local state immediately (optimistic)
-            self._shutter.current_position = 0  # HA scale: 0 = closed
+            # Mark as moving; wait for WebSocket state update for final position
             self._shutter.is_moving = True
             self.async_write_ha_state()
         else:
@@ -172,8 +170,8 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         )
         
         if success:
-            self._shutter.is_moving = False
-            self.async_write_ha_state()
+            # Wait for WebSocket state update to confirm stop
+            _LOGGER.debug(f"Stop command sent to {self._shutter.unique_id}")
         else:
             _LOGGER.error(f"Failed to stop {self._shutter.unique_id}")
     
@@ -201,8 +199,7 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         )
         
         if success:
-            # Update local state immediately (optimistic)
-            self._shutter.current_position = position_ha
+            # Mark as moving; wait for WebSocket state update for final position
             self._shutter.is_moving = True
             self.async_write_ha_state()
         else:

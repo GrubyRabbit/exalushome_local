@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import uuid
 from typing import Callable, Optional, Dict, Any
 
 try:
@@ -14,14 +15,18 @@ from .models import Device, DeviceChannel, DeviceState, ControlFeature, BlindSta
 
 _LOGGER = logging.getLogger(__name__)
 
-# WebSocket protocol structure
-WS_FRAME_TYPE_HANDSHAKE = 0
-WS_FRAME_TYPE_DATA = 1
+# WebSocket protocol constants
+WEBSOCKET_RESOURCE_CONTROL = "/devices/device/control"
+WEBSOCKET_RESOURCE_STATE_CHANGED = "/info/devices/device/state/changed"
 
-# Message types in the protocol
-MSG_TYPE_AUTH = "AuthorizationInfo"
-MSG_TYPE_COMMAND = "DataFrameCommand"
-MSG_TYPE_STATE = "DeviceStateChanged"
+# IDataFrame method enum
+METHOD_GET = 0
+METHOD_POST = 1
+METHOD_DELETE = 2
+METHOD_PUT = 3
+
+# State data types
+STATE_DATA_TYPE_BLIND_POSITION = "BlindPosition"
 
 
 class ExalusLocalClient:
@@ -125,15 +130,16 @@ class ExalusLocalClient:
         """
         try:
             auth_frame = {
-                "serial_number": self.serial,
-                "pin": self.pin,
+                "TransactionId": str(uuid.uuid4()),
+                "Resource": "/system/authorize",
+                "Method": METHOD_POST,
+                "Data": {
+                    "SerialNumber": self.serial,
+                    "PIN": self.pin,
+                }
             }
             
-            msg = json.dumps({
-                "type": MSG_TYPE_AUTH,
-                "data": auth_frame,
-            })
-            
+            msg = json.dumps(auth_frame)
             await self.websocket.send(msg)
             _LOGGER.debug("Authorization frame sent")
             return True
@@ -158,25 +164,37 @@ class ExalusLocalClient:
         """Handle received message."""
         try:
             data = json.loads(msg)
-            msg_type = data.get("type")
             
-            if msg_type == MSG_TYPE_STATE:
+            # Route by Resource field (IDataFrame protocol)
+            resource = data.get("Resource")
+            
+            if resource == WEBSOCKET_RESOURCE_STATE_CHANGED:
                 # Device state changed event
-                await self._on_state_changed(data.get("data", {}))
-            elif msg_type == MSG_TYPE_COMMAND:
-                # Command response (not used for now)
-                pass
+                message_data = data.get("Data", {})
+                
+                # Check if this is a BlindPosition update
+                data_type = message_data.get("DataType")
+                if data_type == STATE_DATA_TYPE_BLIND_POSITION:
+                    await self._on_blind_position_changed(message_data)
             else:
-                _LOGGER.debug(f"Unknown message type: {msg_type}")
+                _LOGGER.debug(f"Ignoring message with resource: {resource}")
                 
         except json.JSONDecodeError:
             _LOGGER.debug(f"Failed to parse message: {msg}")
         except Exception as e:
             _LOGGER.error(f"Error handling message: {e}")
     
-    async def _on_state_changed(self, state_data: Dict[str, Any]):
-        """Handle device state changed event."""
-        _LOGGER.debug(f"State changed: {state_data}")
+    async def _on_blind_position_changed(self, state_data: Dict[str, Any]):
+        """Handle blind position changed event.
+        
+        Args:
+            state_data: Data from the state change event containing:
+                - DeviceGuid: device GUID
+                - Channel: channel number
+                - state.Position: position value (Exalus scale: 0=open, 100=closed)
+                - Other state information
+        """
+        _LOGGER.debug(f"Blind position changed: {state_data}")
         self._notify_state_changed(state_data)
     
     async def send_command(
@@ -200,20 +218,26 @@ class ExalusLocalClient:
             return False
         
         try:
+            # Build IDataFrame with exact protocol format
             frame = {
-                "device": device_guid,
-                "channel": channel_number,
-                "control": command,
+                "TransactionId": str(uuid.uuid4()),
+                "Resource": WEBSOCKET_RESOURCE_CONTROL,
+                "Method": METHOD_POST,
+                "Data": {
+                    "DeviceGuid": device_guid,
+                    "Channel": channel_number,
+                    "ControlFeature": 3,  # Blind control
+                    "SequnceExecutionOrder": 0,
+                    "Data": command  # 101=open, 102=close, 103=stop, or 0-100=position
+                }
             }
             
-            msg = json.dumps({
-                "type": MSG_TYPE_COMMAND,
-                "resource": "/devices/device/control",
-                "data": frame,
-            })
-            
+            msg = json.dumps(frame)
             await self.websocket.send(msg)
-            _LOGGER.debug(f"Command sent: {device_guid}:{channel_number} = {command}")
+            _LOGGER.debug(
+                f"Command sent: device={device_guid}, channel={channel_number}, "
+                f"command={command}"
+            )
             return True
             
         except Exception as e:
