@@ -2,6 +2,33 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.4] - 2026-04-07
+
+### Fixed
+- 2-step configuration flow: collect controller info (host, serial, pin) then user credentials (email, password)
+- Session login now uses real user email and password from config flow (not hardcoded placeholders)
+- Coordinator and platform properly thread email/password through to WebSocket client
+- Config entry data now stored with all five credential fields
+
+### Added
+- CONF_EMAIL and CONF_PASSWORD configuration constants
+- 2-step async_step_user → async_step_user_credentials flow in config_flow.py
+- Email/password parameters to ExalusHomeLocalCoordinator.__init__
+- Email/password extraction in cover.py async_setup_entry
+- Proper credential threading through __init__.py hass.data storage
+
+### Changed
+- Config flow: Step 1 collects controller connection info, Step 2 collects user credentials
+- ExalusLocalClient now receives email and password as constructor parameters
+- _create_session() uses self.email and self.password instead of hardcoded values
+- Config validation tests connect() with real user credentials before saving
+
+### Technical
+- HTTP GET /controller_info: validates controller PIN (step 1 independent)
+- WebSocket session login: uses real user email + password from step 2
+- /devices/list now called only after successful session creation
+- All auth/session debug logs include status values
+
 ## [v0.0.3] - 2026-04-07
 
 ### Fixed
@@ -56,12 +83,13 @@ All notable changes to ExalusHome Local Home Assistant integration will be docum
 
 ---
 
-## Protocol Details (v0.0.3)
+## Protocol Details (v0.0.4)
 
-**Local Connection (Fixed in v0.0.3):**
+**Local Connection (Fixed in v0.0.3, Credentials in v0.0.4):**
 - HTTP validation: GET `http://controller_ip/controller_info` → verify response == "serial:pin"
 - WebSocket: `ws://controller_ip:81/api`
 - Session login: PUT `/users/user/login` (required before /devices/list)
+  - Uses real user email and password from Home Assistant config flow
 - Device enumeration: GET `/devices/list` (after session established)
 - No cloud dependency
 - Event-driven updates (no polling)
@@ -90,15 +118,13 @@ All notable changes to ExalusHome Local Home Assistant integration will be docum
 - Local mode only (no cloud/remote mode)
 - No support for other device types (cameras, intercoms, etc.)
 - Blinds only (ControlFeature=3)
-- Requires controller IP, serial, and PIN in HA configuration
-- /users/user/login credentials: currently hardcoded to local placeholder (Email: "local@exalushome.local")
+- Requires controller IP, serial, PIN, user email, and password in HA configuration
 
 ## Next Steps
 
-- [ ] Test against real ExalusHome controller
-- [ ] Verify device enumeration works
+- [ ] Test against real ExalusHome controller with real user credentials
+- [ ] Verify device enumeration works with Step 2 credentials
 - [ ] Validate state event reception
 - [ ] Test command execution (open/close/stop/position)
-- [ ] Investigate if /users/user/login requires different credentials
 - [ ] Add configuration options (refresh rate, device name customization)
 - [ ] Support for multiple controllers
