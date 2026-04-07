@@ -291,10 +291,26 @@ class ExalusLocalClient:
         Returns:
             Dictionary of devices indexed by GUID
         
-        Evidence:
-        - npm library has GetDevicesAsync(withScenes?: boolean): Promise<IDevice[]>
-        - Local connection should use WebSocket with IDataFrame protocol
-        - Endpoint: Most likely /info/devices or /system/devices (TBD - requires web app capture)
+        EXACT EVIDENCE:
+        Source: /tmp/exalushome_packages/lavva_exalushome/package/build/js/Services/Devices/DevicesService.js
+        
+        DevicesService.GetPairedDevicesAsync() calls:
+            this._connection.SendAndWaitForResponseAsync(new GetDevicesListRequest(), 15000, true)
+        
+        GetDevicesListRequest class definition:
+            class GetDevicesListRequest extends DataFrame {
+                constructor() {
+                    super();
+                    this.Resource = "/devices/list";
+                    this.Method = Method.Get;
+                }
+            }
+        
+        Response handling:
+            if (result.Status == Status.OK && result.Data != null) {
+                this._devices = this.MapApiDevices(result.Data);
+                return this._devices;
+            }
         """
         if not self.is_connected or not self.is_authorized:
             _LOGGER.error("Not connected or authorized")
@@ -303,12 +319,10 @@ class ExalusLocalClient:
         try:
             transaction_id = str(uuid.uuid4())
             
-            # Request device list via WebSocket
-            # Hypothesis: /info/devices is the device list endpoint (mirrors /info/devices/device/state/changed pattern)
-            # If this fails, try /system/devices as fallback
+            # Send GetDevicesListRequest (exact endpoint confirmed from npm library)
             request_frame = {
                 "TransactionId": transaction_id,
-                "Resource": "/info/devices",
+                "Resource": "/devices/list",
                 "Method": METHOD_GET,
             }
             
@@ -318,13 +332,13 @@ class ExalusLocalClient:
             
             msg = json.dumps(request_frame)
             await self.websocket.send(msg)
-            _LOGGER.debug("Device list request sent to /info/devices")
+            _LOGGER.debug("Device list request sent to /devices/list")
             
-            # Wait for response with timeout
+            # Wait for response with timeout (npm uses 15000ms, we use 5s)
             try:
                 response = await asyncio.wait_for(response_future, timeout=5.0)
             except asyncio.TimeoutError:
-                _LOGGER.warning("Device list request timed out - endpoint may be incorrect")
+                _LOGGER.warning("Device list request timed out")
                 self._pending_responses.pop(transaction_id, None)
                 return {}
             
@@ -345,29 +359,20 @@ class ExalusLocalClient:
             
         Returns:
             Dictionary of Device objects indexed by GUID
+        
+        EXACT EVIDENCE:
+        Source: /tmp/exalushome_packages/lavva_exalushome/package/build/js/Services/Devices/DevicesService.js
+        
+        MapApiDevices implementation shows response.Data is array of objects with:
+            Guid, DeviceName, ChannelsNumber, DeviceType, CommunicationWay, DeviceState,
+            IsEnabled, IsVirtual, DeviceSerialNumber, ManufacturerGuid, DeviceModelGuid,
+            DeviceModel, IconType, AvailableTasks[], AvailableResponses[], Channels[]
+        
+        Channel identification: "IBlindPosition" in AvailableTasks indicates blind/shutter
         """
         devices = {}
         
         try:
-            # Response structure expected based on IDataFrame:
-            # {
-            #   "Status": 0,
-            #   "Data": [
-            #     {
-            #       "Guid": "...",
-            #       "Name": "...",
-            #       "State": 1,  # Working=1
-            #       "Channels": [
-            #         {
-            #           "Number": 0,
-            #           "Name": "...",
-            #           "ControlFeature": 3  # Blind=3
-            #         }
-            #       ]
-            #     }
-            #   ]
-            # }
-            
             response_data = response.get("Data", [])
             
             # Handle both array and dict responses
@@ -385,34 +390,55 @@ class ExalusLocalClient:
                         _LOGGER.debug("Skipping device without GUID")
                         continue
                     
-                    # Parse channels
+                    # Parse channels - field name from npm: ChannelsNumber, Channels array
+                    channels_count = device_obj.get("ChannelsNumber", 0)
+                    channels_list = device_obj.get("Channels", [])
+                    
+                    # If Channels array not in response, infer from ChannelsNumber
+                    if not channels_list and channels_count > 0:
+                        channels_list = [
+                            {
+                                "Number": i,
+                                "Name": f"Channel {i}",
+                            }
+                            for i in range(channels_count)
+                        ]
+                    
+                    # Parse channels into DeviceChannel objects
                     channel_list = []
-                    for ch_obj in device_obj.get("Channels", []):
+                    available_tasks = device_obj.get("AvailableTasks", [])
+                    
+                    for ch_obj in channels_list:
                         try:
-                            ch_number = ch_obj.get("Number")
+                            ch_number = ch_obj.get("Number", 0)
                             ch_name = ch_obj.get("Name", f"Channel {ch_number}")
-                            control_feature = ch_obj.get("ControlFeature", ControlFeature.Unknown)
+                            
+                            # Check if device has blind control capability
+                            # Evidence: AvailableTasks contains "IBlindPosition" or "IBlindPositionSimple" for blind channels
+                            is_blind = "IBlindPosition" in available_tasks or "IBlindPositionSimple" in available_tasks
+                            
+                            control_feature = ControlFeature.Blind if is_blind else ControlFeature.Unknown
                             
                             channel = DeviceChannel(
                                 guid=f"{device_guid}_ch{ch_number}",
                                 number=ch_number,
                                 name=ch_name,
-                                control_feature=ControlFeature(control_feature),
+                                control_feature=control_feature,
                                 available=True,
                             )
                             channel_list.append(channel)
                         except Exception as e:
                             _LOGGER.debug(f"Failed to parse channel: {e}")
                     
-                    # Create Device object
-                    device_state_val = device_obj.get("State", DeviceState.NotResponding)
+                    # Create Device object - field names from npm MapApiDevices
+                    device_state_val = device_obj.get("DeviceState", DeviceState.NotResponding)
                     device = Device(
                         guid=device_guid,
-                        name=device_obj.get("Name", f"Device {device_guid}"),
+                        name=device_obj.get("DeviceName", f"Device {device_guid}"),
                         state=DeviceState(device_state_val),
-                        serial_number=device_obj.get("SerialNumber"),
-                        software_version=device_obj.get("SoftwareVersion"),
-                        model=device_obj.get("Model"),
+                        serial_number=device_obj.get("DeviceSerialNumber"),
+                        software_version=None,  # Not in response
+                        model=device_obj.get("DeviceModel"),
                         channels=channel_list,
                     )
                     devices[device_guid] = device
