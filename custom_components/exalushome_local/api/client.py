@@ -52,6 +52,7 @@ class ExalusLocalClient:
         self._state_callbacks = []
         self._connection_callbacks = []
         self._receive_task = None
+        self._pending_responses: Dict[str, asyncio.Future] = {}  # TransactionId -> Future
         
     @property
     def is_connected(self) -> bool:
@@ -164,6 +165,14 @@ class ExalusLocalClient:
         """Handle received message."""
         try:
             data = json.loads(msg)
+            
+            # Check if this is a response to a pending request
+            transaction_id = data.get("TransactionId")
+            if transaction_id and transaction_id in self._pending_responses:
+                future = self._pending_responses.pop(transaction_id)
+                if not future.done():
+                    future.set_result(data)
+                return
             
             # Route by Resource field (IDataFrame protocol)
             resource = data.get("Resource")
@@ -281,9 +290,138 @@ class ExalusLocalClient:
         
         Returns:
             Dictionary of devices indexed by GUID
+        
+        Evidence:
+        - npm library has GetDevicesAsync(withScenes?: boolean): Promise<IDevice[]>
+        - Local connection should use WebSocket with IDataFrame protocol
+        - Endpoint: Most likely /info/devices or /system/devices (TBD - requires web app capture)
         """
-        # TODO: Implement device fetch via local API
-        # This would typically be a GET request to an HTTP endpoint
-        # or a specific WebSocket message requesting device list
-        _LOGGER.warning("Device fetch not yet implemented")
-        return {}
+        if not self.is_connected or not self.is_authorized:
+            _LOGGER.error("Not connected or authorized")
+            return {}
+        
+        try:
+            transaction_id = str(uuid.uuid4())
+            
+            # Request device list via WebSocket
+            # Hypothesis: /info/devices is the device list endpoint (mirrors /info/devices/device/state/changed pattern)
+            # If this fails, try /system/devices as fallback
+            request_frame = {
+                "TransactionId": transaction_id,
+                "Resource": "/info/devices",
+                "Method": METHOD_GET,
+            }
+            
+            # Create future for response
+            response_future = asyncio.Future()
+            self._pending_responses[transaction_id] = response_future
+            
+            msg = json.dumps(request_frame)
+            await self.websocket.send(msg)
+            _LOGGER.debug("Device list request sent to /info/devices")
+            
+            # Wait for response with timeout
+            try:
+                response = await asyncio.wait_for(response_future, timeout=5.0)
+            except asyncio.TimeoutError:
+                _LOGGER.warning("Device list request timed out - endpoint may be incorrect")
+                self._pending_responses.pop(transaction_id, None)
+                return {}
+            
+            # Parse response and convert to Device objects
+            devices = self._parse_device_list_response(response)
+            _LOGGER.info(f"Fetched {len(devices)} device(s)")
+            return devices
+            
+        except Exception as e:
+            _LOGGER.error(f"Device fetch failed: {e}")
+            return {}
+    
+    def _parse_device_list_response(self, response: Dict[str, Any]) -> Dict[str, Device]:
+        """Parse device list response and convert to Device objects.
+        
+        Args:
+            response: IDataFrame response containing device data
+            
+        Returns:
+            Dictionary of Device objects indexed by GUID
+        """
+        devices = {}
+        
+        try:
+            # Response structure expected based on IDataFrame:
+            # {
+            #   "Status": 0,
+            #   "Data": [
+            #     {
+            #       "Guid": "...",
+            #       "Name": "...",
+            #       "State": 1,  # Working=1
+            #       "Channels": [
+            #         {
+            #           "Number": 0,
+            #           "Name": "...",
+            #           "ControlFeature": 3  # Blind=3
+            #         }
+            #       ]
+            #     }
+            #   ]
+            # }
+            
+            response_data = response.get("Data", [])
+            
+            # Handle both array and dict responses
+            if isinstance(response_data, dict):
+                response_data = [response_data]
+            
+            if not isinstance(response_data, list):
+                _LOGGER.warning(f"Unexpected response format: {type(response_data)}")
+                return {}
+            
+            for device_obj in response_data:
+                try:
+                    device_guid = device_obj.get("Guid")
+                    if not device_guid:
+                        _LOGGER.debug("Skipping device without GUID")
+                        continue
+                    
+                    # Parse channels
+                    channel_list = []
+                    for ch_obj in device_obj.get("Channels", []):
+                        try:
+                            ch_number = ch_obj.get("Number")
+                            ch_name = ch_obj.get("Name", f"Channel {ch_number}")
+                            control_feature = ch_obj.get("ControlFeature", ControlFeature.Unknown)
+                            
+                            channel = DeviceChannel(
+                                guid=f"{device_guid}_ch{ch_number}",
+                                number=ch_number,
+                                name=ch_name,
+                                control_feature=ControlFeature(control_feature),
+                                available=True,
+                            )
+                            channel_list.append(channel)
+                        except Exception as e:
+                            _LOGGER.debug(f"Failed to parse channel: {e}")
+                    
+                    # Create Device object
+                    device_state_val = device_obj.get("State", DeviceState.NotResponding)
+                    device = Device(
+                        guid=device_guid,
+                        name=device_obj.get("Name", f"Device {device_guid}"),
+                        state=DeviceState(device_state_val),
+                        serial_number=device_obj.get("SerialNumber"),
+                        software_version=device_obj.get("SoftwareVersion"),
+                        model=device_obj.get("Model"),
+                        channels=channel_list,
+                    )
+                    devices[device_guid] = device
+                    _LOGGER.debug(f"Added device: {device.name} ({device_guid}) with {len(channel_list)} channel(s)")
+                    
+                except Exception as e:
+                    _LOGGER.error(f"Failed to parse device object: {e}")
+                    
+        except Exception as e:
+            _LOGGER.error(f"Failed to parse device list response: {e}")
+        
+        return devices
