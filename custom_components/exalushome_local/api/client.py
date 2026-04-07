@@ -36,12 +36,13 @@ class ExalusLocalClient:
         """Initialize client.
         
         Args:
-            host: Controller IP address
+            host: Controller IP address (plain host/IP, no protocol prefix)
             serial: Controller serial number
             pin: Controller PIN
             port: WebSocket port (default 81)
         """
-        self.host = host
+        # Normalize host: strip protocol prefixes and trailing slashes
+        self.host = self._normalize_host(host)
         self.serial = serial
         self.pin = pin
         self.port = port
@@ -53,7 +54,29 @@ class ExalusLocalClient:
         self._connection_callbacks = []
         self._receive_task = None
         self._pending_responses: Dict[str, asyncio.Future] = {}  # TransactionId -> Future
+    
+    @staticmethod
+    def _normalize_host(host: str) -> str:
+        """Normalize host by removing protocol prefixes and trailing slashes.
         
+        Args:
+            host: Raw host input (may contain protocols like http://, ws://, etc.)
+            
+        Returns:
+            Normalized host/IP address
+        """
+        host = host.strip()
+        
+        # Remove protocol prefixes
+        for prefix in ("wss://", "ws://", "https://", "http://"):
+            if host.lower().startswith(prefix):
+                host = host[len(prefix):]
+        
+        # Remove trailing slashes
+        host = host.rstrip("/")
+        
+        return host
+    
     @property
     def is_connected(self) -> bool:
         """Check if connected."""
@@ -71,8 +94,10 @@ class ExalusLocalClient:
             True if connection successful and authorized
         """
         try:
-            ws_url = f"ws://{self.host}:{self.port}/"
-            _LOGGER.debug(f"Connecting to {ws_url}")
+            # Build WebSocket URL with /api endpoint
+            # HTTP 200 error suggests wrong path - /api is typical for WebSocket APIs
+            ws_url = f"ws://{self.host}:{self.port}/api"
+            _LOGGER.debug(f"Attempting WebSocket connection to: {ws_url}")
             
             if websockets is None:
                 _LOGGER.error("websockets library not available")
@@ -81,6 +106,7 @@ class ExalusLocalClient:
             self.websocket = await websockets.connect(ws_url)
             self._connected = True
             _LOGGER.info(f"Connected to {self.host}:{self.port}")
+            _LOGGER.debug(f"WebSocket URL: {ws_url}")
             
             # Start receive loop
             self._receive_task = asyncio.create_task(self._receive_loop())

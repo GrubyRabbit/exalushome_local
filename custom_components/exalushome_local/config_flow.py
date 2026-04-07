@@ -26,16 +26,22 @@ class ExalusHomeLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         
         if user_input is not None:
-            # Validate input
+            # Validate and normalize input
             try:
+                # Normalize host - strip protocols and slashes
                 host = user_input.get(CONF_HOST, "").strip()
+                host = self._normalize_host(host)
+                
                 serial = user_input.get(CONF_SERIAL, "").strip()
                 pin = user_input.get(CONF_PIN, "").strip()
                 
                 if not host or not serial or not pin:
                     errors["base"] = "invalid_input"
+                elif "/" in host or "://" in host:
+                    # User provided protocol or path - normalize didn't catch it
+                    errors[CONF_HOST] = "invalid_host"
                 else:
-                    # Test connection
+                    # Test connection with normalized host
                     client = ExalusLocalClient(host, serial, pin)
                     if await client.connect():
                         await client.disconnect()
@@ -44,9 +50,13 @@ class ExalusHomeLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         await self.async_set_unique_id(serial)
                         self._abort_if_unique_id_configured()
                         
+                        # Store normalized host in config
+                        config_data = dict(user_input)
+                        config_data[CONF_HOST] = host
+                        
                         return self.async_create_entry(
                             title=f"ExalusHome {host}",
-                            data=user_input,
+                            data=config_data,
                         )
                     else:
                         errors["base"] = "cannot_connect"
@@ -65,6 +75,28 @@ class ExalusHomeLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={},
         )
+    
+    @staticmethod
+    def _normalize_host(host: str) -> str:
+        """Normalize host by removing protocol prefixes and trailing slashes.
+        
+        Args:
+            host: Raw host input (may contain protocols like http://, ws://, etc.)
+            
+        Returns:
+            Normalized host/IP address
+        """
+        host = host.strip()
+        
+        # Remove protocol prefixes
+        for prefix in ("wss://", "ws://", "https://", "http://"):
+            if host.lower().startswith(prefix):
+                host = host[len(prefix):]
+        
+        # Remove trailing slashes and paths
+        host = host.rstrip("/").split("/")[0]
+        
+        return host
 
 
 config_entries.HANDLERS.register(ExalusHomeLocalConfigFlow)
