@@ -2,6 +2,25 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.3] - 2026-04-07
+
+### Fixed
+- Local authentication flow: replaced WebSocket /system/authorize with HTTP GET /controller_info validation
+- Session login prerequisite: added /users/user/login WebSocket request before device enumeration
+- Device enumeration: check response.Status before parsing Data (fixes Data=null crashes)
+- Error handling: Status values now logged (e.g., Status=13 UserNotLoggedIn) instead of silent failures
+
+### Added
+- HTTP controller_info validation (LocalNetworkExalusConnectionService.js:195-226 pattern)
+- Session login request via /users/user/login (LocalNetworkExalusConnectionService.js:264 prerequisite)
+- Protocol Status constants (OK=0, UserNotLoggedIn=13, etc.)
+- Debug logging for auth, session, and device enumeration steps
+
+### Changed
+- connect() flow: HTTP auth → WebSocket connect → Session login (waits for all 3 steps)
+- fetch_devices() now validates session is established before sending /devices/list
+- Response parsing validates Status == OK before accessing Data field
+
 ## [v0.0.2] - 2026-04-07
 
 ### Added
@@ -37,10 +56,13 @@ All notable changes to ExalusHome Local Home Assistant integration will be docum
 
 ---
 
-## Protocol Details (v0.0.2)
+## Protocol Details (v0.0.3)
 
-**Local Connection:**
+**Local Connection (Fixed in v0.0.3):**
+- HTTP validation: GET `http://controller_ip/controller_info` → verify response == "serial:pin"
 - WebSocket: `ws://controller_ip:81/api`
+- Session login: PUT `/users/user/login` (required before /devices/list)
+- Device enumeration: GET `/devices/list` (after session established)
 - No cloud dependency
 - Event-driven updates (no polling)
 
@@ -58,6 +80,7 @@ All notable changes to ExalusHome Local Home Assistant integration will be docum
 **Device Enumeration:**
 - Resource: `/devices/list`
 - Method: GET (0)
+- Prerequisite: Session must be logged in via /users/user/login
 - Shutter identification: "IBlindPosition" in AvailableTasks
 
 ---
@@ -68,7 +91,7 @@ All notable changes to ExalusHome Local Home Assistant integration will be docum
 - No support for other device types (cameras, intercoms, etc.)
 - Blinds only (ControlFeature=3)
 - Requires controller IP, serial, and PIN in HA configuration
-- WebSocket endpoint path assumed to be `/api` (may vary by controller)
+- /users/user/login credentials: currently hardcoded to local placeholder (Email: "local@exalushome.local")
 
 ## Next Steps
 
@@ -76,5 +99,6 @@ All notable changes to ExalusHome Local Home Assistant integration will be docum
 - [ ] Verify device enumeration works
 - [ ] Validate state event reception
 - [ ] Test command execution (open/close/stop/position)
+- [ ] Investigate if /users/user/login requires different credentials
 - [ ] Add configuration options (refresh rate, device name customization)
 - [ ] Support for multiple controllers
