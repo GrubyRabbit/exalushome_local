@@ -1,0 +1,449 @@
+{
+  "packages": {
+    "main_api": {
+      "file": "Api.d.ts",
+      "path": "build/js/Api.d.ts",
+      "exports": [
+        "Array",
+        "Uint8Array",
+        "Uint8ClampedArray",
+        "Uint16Array",
+        "Uint32Array",
+        "Int8Array",
+        "Int16Array",
+        "Int32Array",
+        "Float32Array",
+        "Float64Array",
+        "Map",
+        "Set",
+        "String",
+        "GetDependencyContainer",
+        "GetDependencyContainer",
+        "Api"
+      ]
+    }
+  },
+  "key_services": [
+    {
+      "name": "ExalusConnectionService",
+      "type": "Remote/Cloud",
+      "description": "SignalR-based remote connection via cloud broker",
+      "file": "ExalusConnectionService.d.ts"
+    },
+    {
+      "name": "LocalNetworkExalusConnectionService",
+      "type": "Local/Direct IP",
+      "description": "WebSocket-based direct connection via controller IP:port",
+      "file": "LocalNetworkExalusConnectionService.d.ts"
+    }
+  ],
+  "connection_modes": [
+    {
+      "mode": "Local Network",
+      "transport": "WebSocket",
+      "protocol": "Custom binary protocol over WebSocket",
+      "requires_auth": true,
+      "auth_method": "PIN-based"
+    },
+    {
+      "mode": "Remote Cloud",
+      "transport": "SignalR (WebSocket fallback)",
+      "protocol": "SignalR with Microsoft.AspNetCore hub negotiation",
+      "requires_auth": true,
+      "auth_method": "Credentials-based (username/password)",
+      "broker_selection": "Failover across multiple broker servers"
+    }
+  ],
+  "device_types": [
+    {
+      "response": "BlindOpenCloseTime",
+      "interface_type": "IBlindOpenCloseTime"
+    },
+    {
+      "response": "BlindPosition",
+      "interface_type": "IBlindPosition"
+    },
+    {
+      "response": "BlindRemoteButtonState",
+      "interface_type": "IBlindsControlButton"
+    },
+    {
+      "response": "BlindErrorState",
+      "interface_type": "IBlindError"
+    },
+    {
+      "response": "FacadePosition",
+      "interface_type": "IFacadeState"
+    },
+    {
+      "response": "GatePosition",
+      "interface_type": "IGatePosition"
+    },
+    {
+      "response": "GatewayPosition",
+      "interface_type": "IGatewayPosition"
+    },
+    {
+      "response": "BlindCalibration",
+      "interface_type": "BlindCalibration"
+    }
+  ],
+  "shutter_commands": [
+    {
+      "command": "SetBlindPosition",
+      "interface_type": "IBlindPosition"
+    },
+    {
+      "command": "SetBlindPositionSimple",
+      "interface_type": "IBlindPositionSimple"
+    },
+    {
+      "command": "SetBlindMicroventilation",
+      "interface_type": "IMicroventilation"
+    },
+    {
+      "command": "SetBlindOpenCloseTime",
+      "interface_type": "ISetBlindOpenCloseTime"
+    },
+    {
+      "command": "SetGatePosition",
+      "interface_type": "IGatePosition"
+    },
+    {
+      "command": "SetGatewayPosition",
+      "interface_type": "IGatewayPosition"
+    },
+    {
+      "command": "ChangeGatePositionPulse",
+      "interface_type": "IGatePulse"
+    },
+    {
+      "command": "ChangeGatewayPositionPulse",
+      "interface_type": "IGatewayPulse"
+    },
+    {
+      "command": "PreciseGateControl",
+      "interface_type": "IPreciseGateControl"
+    },
+    {
+      "command": "PreciseGateControlSecure",
+      "interface_type": "IPreciseGateControlSecure"
+    }
+  ],
+  "task_types": [
+    {
+      "name": "Unknown",
+      "interface": "Unknown"
+    },
+    {
+      "name": "SetBlindPosition",
+      "interface": "IBlindPosition"
+    },
+    {
+      "name": "SetBlindPositionSimple",
+      "interface": "IBlindPositionSimple"
+    },
+    {
+      "name": "SetBlindMicroventilation",
+      "interface": "IMicroventilation"
+    },
+    {
+      "name": "TurnOff",
+      "interface": "IChannelOff"
+    },
+    {
+      "name": "TurnOn",
+      "interface": "IChannelOn"
+    },
+    {
+      "name": "TurnOnWithTime",
+      "interface": "IChannelOnWithTime"
+    },
+    {
+      "name": "TogleState",
+      "interface": "IChannelSwitchState"
+    },
+    {
+      "name": "SetLightBrightnessDynamicly",
+      "interface": "IDynamicLightBrightness"
+    },
+    {
+      "name": "SetLightBrightness",
+      "interface": "ILightBrightness"
+    },
+    {
+      "name": "SetLightColor",
+      "interface": "ILightColor"
+    },
+    {
+      "name": "SetLightTemperature",
+      "interface": "ILightTemperature"
+    },
+    {
+      "name": "PairDevice",
+      "interface": "IPair"
+    },
+    {
+      "name": "UnpairDevice",
+      "interface": "IUnpair"
+    },
+    {
+      "name": "IdentifyDevice",
+      "interface": "IIdentifyDevice"
+    },
+    {
+      "name": "GetChannelsState",
+      "interface": "IGetDeviceState"
+    },
+    {
+      "name": "GetPowerMeasurements",
+      "interface": "IGetPowerMeasurements"
+    },
+    {
+      "name": "GetAvailableData",
+      "interface": "IGetAvailableData"
+    },
+    {
+      "name": "MultipleDataRequest",
+      "interface": "IMultipleDataRequest"
+    },
+    {
+      "name": "SetBlindOpenCloseTime",
+      "interface": "ISetBlindOpenCloseTime"
+    },
+    {
+      "name": "SetTemperature",
+      "interface": "IChangeTemperature"
+    },
+    {
+      "name": "SetGatePosition",
+      "interface": "IGatePosition"
+    },
+    {
+      "name": "SetGatewayPosition",
+      "interface": "IGatewayPosition"
+    },
+    {
+      "name": "ChangeGatePositionPulse",
+      "interface": "IGatePulse"
+    },
+    {
+      "name": "ChangeGatewayPositionPulse",
+      "interface": "IGatewayPulse"
+    },
+    {
+      "name": "SetFacadePosition",
+      "interface": "IFacadePosition"
+    },
+    {
+      "name": "GetFacadeType",
+      "interface": "IGetFacadeType"
+    },
+    {
+      "name": "LightRGBW",
+      "interface": "ILightRGBW"
+    },
+    {
+      "name": "PreciseGateControl",
+      "interface": "IPreciseGateControl"
+    },
+    {
+      "name": "PreciseGateControlSecure",
+      "interface": "IPreciseGateControlSecure"
+    }
+  ],
+  "response_types": [
+    {
+      "name": "Unknown",
+      "interface": "Unknown"
+    },
+    {
+      "name": "BatteryState",
+      "interface": "IBatteryState"
+    },
+    {
+      "name": "BinarySensorState",
+      "interface": "IBinarySensor"
+    },
+    {
+      "name": "BlindOpenCloseTime",
+      "interface": "IBlindOpenCloseTime"
+    },
+    {
+      "name": "BlindPosition",
+      "interface": "IBlindPosition"
+    },
+    {
+      "name": "BlindRemoteButtonState",
+      "interface": "IBlindsControlButton"
+    },
+    {
+      "name": "BlindErrorState",
+      "interface": "IBlindError"
+    },
+    {
+      "name": "MeasuredBrightness",
+      "interface": "IBrightness"
+    },
+    {
+      "name": "RemoteButtonState",
+      "interface": "IButtonState"
+    },
+    {
+      "name": "ChannelOnOffState",
+      "interface": "IChannelOnOff"
+    },
+    {
+      "name": "IntercomState",
+      "interface": "IIntercom"
+    },
+    {
+      "name": "DoorBellState",
+      "interface": "IDoorBell"
+    },
+    {
+      "name": "FacadeRemoteButtonState",
+      "interface": "IFacadeControlButton"
+    },
+    {
+      "name": "FacadePosition",
+      "interface": "IFacadeState"
+    },
+    {
+      "name": "FacadeType",
+      "interface": "IFacadeType"
+    },
+    {
+      "name": "FloodSensorState",
+      "interface": "IFloodSensor"
+    },
+    {
+      "name": "GatePosition",
+      "interface": "IGatePosition"
+    },
+    {
+      "name": "GatewayPosition",
+      "interface": "IGatewayPosition"
+    },
+    {
+      "name": "GateControllerHealth",
+      "interface": "IGateControllerHealth"
+    },
+    {
+      "name": "HumiditySensorState",
+      "interface": "IHumiditySensor"
+    },
+    {
+      "name": "LightBrightness",
+      "interface": "ILightBrightness"
+    },
+    {
+      "name": "LightColor",
+      "interface": "ILightColor"
+    },
+    {
+      "name": "LightWarmth",
+      "interface": "ILightTemperature"
+    },
+    {
+      "name": "LightTreshold",
+      "interface": "ILightTreshold"
+    },
+    {
+      "name": "MovementSensorState",
+      "interface": "IMovementSensor"
+    },
+    {
+      "name": "OnlineCamera",
+      "interface": "IOnlineCamera"
+    },
+    {
+      "name": "OvercurrentProtectionState",
+      "interface": "IOvercurrentProtection"
+    },
+    {
+      "name": "OvercurrentProtectionThreshold",
+      "interface": "IOvercurrentProtectionThreshold"
+    },
+    {
+      "name": "ReedState",
+      "interface": "IReedState"
+    },
+    {
+      "name": "SignalStrength",
+      "interface": "ISignalStrength"
+    },
+    {
+      "name": "SmokeSensorState",
+      "interface": "ISmokeSensor"
+    },
+    {
+      "name": "MeasuredTemperature",
+      "interface": "ITemperature"
+    },
+    {
+      "name": "VibrationSensorState",
+      "interface": "IVibrationSensor"
+    },
+    {
+      "name": "MeasuredWindSpeed",
+      "interface": "IWindSpeed"
+    },
+    {
+      "name": "WindThreshold",
+      "interface": "IWindThreshold"
+    },
+    {
+      "name": "MeasuredEnergy",
+      "interface": "IEnergy"
+    },
+    {
+      "name": "MeasuredDistance",
+      "interface": "DistanceSensor"
+    },
+    {
+      "name": "BlindCalibration",
+      "interface": "BlindCalibration"
+    },
+    {
+      "name": "ConfigurationState",
+      "interface": "ConfigurationState"
+    },
+    {
+      "name": "CurrentWindThreshold",
+      "interface": "CurrentWindThreshold"
+    },
+    {
+      "name": "CurrentLightThreshold",
+      "interface": "CurrentLightThreshold"
+    },
+    {
+      "name": "WindSpeedState",
+      "interface": "WindSpeed"
+    },
+    {
+      "name": "TamperProtectionState",
+      "interface": "ITamperProtection"
+    },
+    {
+      "name": "PressureSensorState",
+      "interface": "IPressureSensor"
+    },
+    {
+      "name": "LightRGBWState",
+      "interface": "ILightRGBW"
+    },
+    {
+      "name": "SceneExecuted",
+      "interface": "ISceneExecuted"
+    },
+    {
+      "name": "HallState",
+      "interface": "IHallState"
+    },
+    {
+      "name": "Intercom",
+      "interface": "IIntercom"
+    }
+  ]
+}

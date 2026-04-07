@@ -1,0 +1,13 @@
+/tmp/exalushome_packages/exalushome-wekta/package/package.json
+/tmp/exalushome_packages/exalushome-wekta/package/build/exalushome-WektaIntercoms-bundle.js.map
+/tmp/exalushome_packages/exalushome-wekta/package/build/js/Intercom.d.ts
+/tmp/exalushome_packages/exalushome-wekta/package/build/js/Intercom.js.map
+/tmp/exalushome_packages/exalushome-wekta/package/build/js/WektaIntercomsService.js
+/tmp/exalushome_packages/exalushome-wekta/package/build/js/WektaIntercomsService.js.map
+/tmp/exalushome_packages/exalushome-wekta/package/build/js/IWektaIntercomsService.js
+/tmp/exalushome_packages/exalushome-wekta/package/build/js/Intercom.js
+/tmp/exalushome_packages/exalushome-wekta/package/build/js/WektaIntercomsService.d.ts
+/tmp/exalushome_packages/exalushome-wekta/package/build/js/IWektaIntercomsService.js.map
+/tmp/exalushome_packages/exalushome-wekta/package/build/js/IWektaIntercomsService.d.ts
+/tmp/exalushome_packages/exalushome-wekta/package/build/tsconfig.tsbuildinfo
+/tmp/exalushome_packages/exalushome-wekta/package/build/exalushome-WektaIntercoms-bundle.js

@@ -1,0 +1,44 @@
+{
+  "remote_auth": {
+    "interface": "AuthorizationInfo",
+    "fields": [
+      "serialNumber: string;",
+      "pin: string;",
+      "constructor(serialNumber: string, pin: string);",
+      "SerialNumber: string;",
+      "PIN: string;"
+    ],
+    "initialization": []
+  },
+  "local_auth": {
+    "interface": null,
+    "fields": [],
+    "initialization": []
+  },
+  "dataframe": {
+    "interface": "IDataFrame<T>",
+    "fields": [
+      "Resource?: string;",
+      "TransactionId?: string;",
+      "Data?: T;",
+      "Status?: Status;",
+      "Method?: Method;"
+    ]
+  },
+  "connection_states": [
+    "Disconnected = 0",
+    "Connecting = 1",
+    "Connected = 3",
+    "Disconnecting = 4",
+    "Failed = 5",
+    "Reconnecting = 6",
+    "ConnectedAndAuthorized = 7"
+  ],
+  "device_discovery_methods": [
+    "GetDevicesForManualPairingAsync(protocolExtensionGuids?: string[] | undefined): Promise<ManuallyPairedDevice[]>",
+    "GetDevicesForManualPairingAsync(protocolExtensionGuid?: string | undefined): Promise<ManuallyPairedDevice[]>",
+    "GetCurrentlyRunningTaksAsync(): Promise<void>",
+    "GetDevicesAsync(withScenes?: boolean): Promise<IDevice[]>",
+    "GetFoundDevicesAsync(): Promise<IDevice[]>"
+  ]
+}
