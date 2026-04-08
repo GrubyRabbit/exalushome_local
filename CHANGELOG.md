@@ -2,6 +2,14 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.10] - 2026-04-08
+
+### Added
+- Targeted debug logging for blind state pipeline
+- [STATE-RAW] logs: websocket frame reception, parsed DeviceGuid/DataType/Channel/Position
+- [STATE-COORD] logs: callback invocation, shutter lookup, state updates before/after
+- [STATE-COVER] logs: property access for position, is_closed, is_opening, is_closing
+
 ## [v0.0.9] - 2026-04-08
 
 ### Fixed
