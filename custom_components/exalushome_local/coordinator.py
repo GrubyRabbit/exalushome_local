@@ -31,12 +31,20 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         email: str = None,
         password: str = None,
     ):
-        """Initialize coordinator."""
+        """Initialize coordinator.
+        
+        Periodic /devices/list polling is disabled.
+        Device enumeration happens only on:
+        - initial startup (async_config_entry_first_refresh)
+        - websocket reconnect
+        
+        Websocket state events provide live blind state updates.
+        """
         super().__init__(
             hass,
             _LOGGER,
             name="ExalusHome Local",
-            update_interval=timedelta(seconds=DEFAULT_STATE_POLLING_INTERVAL),
+            update_interval=None,  # No periodic polling; websocket provides live state
         )
         
         self.client = ExalusLocalClient(host, serial, pin, email, password)
