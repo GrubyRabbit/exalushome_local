@@ -2,6 +2,22 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.14] - 2026-04-08
+
+### Fixed
+- Preserve existing shutters when /devices/list refresh times out
+- Prevent refresh failures from behaving like empty device results
+- Return cached shutters on timeout instead of clearing state
+
+### Changed
+- Increase /devices/list polling interval from 30s to 300s
+- Reduce unnecessary API calls, websocket provides live state
+- Device enumeration is metadata-only refresh
+
+### Verified
+- Filter only real blind entities from official enumeration data
+- Exalus scenes/automations excluded via IBlindPosition capability check
+
 ## [v0.0.13] - 2026-04-08
 
 ### Fixed
