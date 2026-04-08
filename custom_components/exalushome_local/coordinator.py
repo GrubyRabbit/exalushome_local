@@ -95,7 +95,7 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             blind_channels = device.get_blind_channels()
             
             for channel in blind_channels:
-                unique_id = f"{device_guid}_{channel}"
+                unique_id = f"{device_guid}_{channel.number}"
                 
                 if unique_id in self._shutters:
                     # Existing shutter: keep websocket-updated state, update metadata
