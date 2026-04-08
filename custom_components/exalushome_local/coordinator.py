@@ -59,7 +59,11 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             raise
     
     async def _async_update_data(self) -> Dict[str, ShutterDevice]:
-        """Fetch latest data from controller."""
+        """Fetch latest data from controller.
+        
+        On timeout or failure, preserve existing shutters and their websocket-updated state.
+        Websocket state events are the live source of truth; device refresh is metadata-only.
+        """
         try:
             if not self.client.is_connected:
                 _LOGGER.warning("Not connected, attempting reconnect")
@@ -75,8 +79,13 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             return self._shutters
             
         except Exception as e:
-            _LOGGER.error(f"Update failed: {e}")
-            raise UpdateFailed(f"Failed to update: {e}")
+            # Timeout or fetch failure: preserve existing shutters and their state
+            # Websocket state updates are live and should be preserved
+            _LOGGER.warning(f"Device refresh failed (preserving existing {len(self._shutters)} shutters): {e}")
+            if self._shutters:
+                _LOGGER.debug(f"Returning cached shutters: {list(self._shutters.keys())}")
+                return self._shutters
+            raise UpdateFailed(f"Failed to fetch devices and no cached shutters available: {e}")
     
     def _update_shutters_from_devices(self, devices: Dict[str, Device]):
         """Update shutters from device list, preserving websocket state.

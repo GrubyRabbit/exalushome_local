@@ -12,7 +12,7 @@ CONF_PASSWORD = "password"
 # Default values
 DEFAULT_PORT = 81
 DEFAULT_PING_INTERVAL = 5000  # milliseconds
-DEFAULT_STATE_POLLING_INTERVAL = 30  # seconds
+DEFAULT_STATE_POLLING_INTERVAL = 300  # seconds - reduce unnecessary /devices/list refreshes, websocket provides live state
 
 # WebSocket protocol constants
 WEBSOCKET_PORT = 81
