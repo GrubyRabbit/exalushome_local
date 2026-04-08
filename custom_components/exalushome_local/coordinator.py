@@ -51,6 +51,7 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         self._host = host
         self._serial = serial
         self._shutters: Dict[str, ShutterDevice] = {}
+        self._startup_complete = False
         
     async def async_config_entry_first_refresh(self) -> bool:
         """Perform first refresh on config entry setup."""
@@ -61,10 +62,28 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             # Register state change callback
             self.client.on_state_changed(self._on_device_state_changed)
             
-            return await super().async_config_entry_first_refresh()
+            _LOGGER.debug(f"[REFRESH] Startup refresh beginning")
+            result = await super().async_config_entry_first_refresh()
+            self._startup_complete = True
+            _LOGGER.debug(f"[REFRESH] Startup refresh complete")
+            return result
         except Exception as e:
             _LOGGER.error(f"First refresh failed: {e}")
             raise
+    
+    async def async_refresh(self, log_failures: bool = True, force_refresh: bool = False):
+        """Override to prevent automatic refreshes after startup.
+        
+        Device enumeration only happens on:
+        - startup (via async_config_entry_first_refresh)
+        - websocket reconnect (explicit call with force_refresh=True)
+        """
+        if not force_refresh and self._startup_complete:
+            _LOGGER.debug(f"[REFRESH] Blocked automatic refresh request - using cached state")
+            return
+        
+        _LOGGER.debug(f"[REFRESH] Allowed refresh: force_refresh={force_refresh}, startup_complete={self._startup_complete}")
+        await super().async_refresh(log_failures=log_failures, force_refresh=force_refresh)
     
     async def _async_update_data(self) -> Dict[str, ShutterDevice]:
         """Fetch latest data from controller.
@@ -74,11 +93,12 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         """
         try:
             if not self.client.is_connected:
-                _LOGGER.warning("Not connected, attempting reconnect")
+                _LOGGER.warning("[REFRESH] Not connected, attempting reconnect")
                 if not await self.client.connect():
                     raise UpdateFailed("Cannot reconnect to controller")
             
             # Fetch devices from controller
+            _LOGGER.debug(f"[REFRESH] Fetching devices from /devices/list")
             devices = await self.client.fetch_devices()
             
             # Update shutters: merge device metadata with existing websocket state
@@ -89,9 +109,9 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         except Exception as e:
             # Timeout or fetch failure: preserve existing shutters and their state
             # Websocket state updates are live and should be preserved
-            _LOGGER.warning(f"Device refresh failed (preserving existing {len(self._shutters)} shutters): {e}")
+            _LOGGER.warning(f"[REFRESH] Device refresh failed (preserving existing {len(self._shutters)} shutters): {e}")
             if self._shutters:
-                _LOGGER.debug(f"Returning cached shutters: {list(self._shutters.keys())}")
+                _LOGGER.debug(f"[REFRESH] Returning cached shutters: {list(self._shutters.keys())}")
                 return self._shutters
             raise UpdateFailed(f"Failed to fetch devices and no cached shutters available: {e}")
     
