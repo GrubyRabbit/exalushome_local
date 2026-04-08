@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 import uuid
 from typing import Callable, Optional, Dict, Any
 
@@ -83,6 +84,8 @@ class ExalusLocalClient:
         self._connection_callbacks = []
         self._logout_callbacks = []
         self._receive_task = None
+        self._ping_task = None
+        self._last_received_packet_time: Optional[float] = None
         self._pending_responses: Dict[str, asyncio.Future] = {}  # TransactionId -> Future
         self._session_login_event: Optional[asyncio.Event] = None
     
@@ -139,10 +142,14 @@ class ExalusLocalClient:
             
             self.websocket = await websockets.connect(ws_url)
             self._connected = True
+            self._last_received_packet_time = time.time()
             _LOGGER.info(f"Connected to {self.host}:{self.port}")
             
             # Start receive loop
             self._receive_task = asyncio.create_task(self._receive_loop())
+            
+            # Start ping keepalive loop (producer-aligned)
+            self._ping_task = asyncio.create_task(self._ping_loop())
             
             # Step 2: Create session via /users/user/login
             if not await self._create_session():
@@ -163,6 +170,14 @@ class ExalusLocalClient:
         self._authorized = False
         self._session_logged_in = False
         self._connected = False
+        
+        if self._ping_task:
+            self._ping_task.cancel()
+            try:
+                await self._ping_task
+            except asyncio.CancelledError:
+                pass
+            self._ping_task = None
         
         if self._receive_task:
             self._receive_task.cancel()
@@ -300,9 +315,61 @@ class ExalusLocalClient:
             _LOGGER.error(f"Receive loop error: {e}")
             await self.disconnect()
     
+    async def _ping_loop(self):
+        """Keepalive ping loop (producer-aligned).
+        
+        Sends /system/ping every 5 seconds to keep session alive.
+        Matches LocalNetworkExalusConnectionService._pingInterval = 5000ms.
+        """
+        ping_interval = 5.0
+        
+        try:
+            while self._connected and self.websocket:
+                await asyncio.sleep(ping_interval)
+                
+                if not self._connected or not self.websocket:
+                    break
+                
+                # Check if we've received packets recently
+                if self._last_received_packet_time is not None:
+                    elapsed = time.time() - self._last_received_packet_time
+                    if elapsed < ping_interval:
+                        _LOGGER.debug(f"[PING] ping skipped because recent traffic received ({elapsed:.1f}s ago)")
+                        continue
+                
+                # Send ping frame
+                try:
+                    await self._send_ping()
+                except Exception as e:
+                    _LOGGER.debug(f"[PING] ping failed: {e}")
+                    
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            _LOGGER.error(f"Ping loop error: {e}")
+    
+    async def _send_ping(self):
+        """Send /system/ping keepalive frame."""
+        try:
+            ping_frame = {
+                "TransactionId": str(uuid.uuid4()),
+                "Resource": "/system/ping",
+                "Method": METHOD_GET,
+            }
+            
+            msg = json.dumps(ping_frame)
+            await self.websocket.send(msg)
+            _LOGGER.debug(f"[PING] ping sent")
+        except Exception as e:
+            _LOGGER.error(f"[PING] failed to send ping: {e}")
+            raise
+    
     async def _handle_message(self, msg: str):
         """Handle received message."""
         try:
+            # Track packet receive time for ping keepalive (producer-aligned)
+            self._last_received_packet_time = time.time()
+            
             data = json.loads(msg)
             
             # Check if this is a response to a pending request

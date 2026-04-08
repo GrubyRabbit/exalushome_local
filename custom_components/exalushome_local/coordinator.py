@@ -230,36 +230,18 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             _LOGGER.error(f"[STATE-COORD] Error: {e}", exc_info=True)
     
     async def _on_session_logout(self):
-        """Handle session logout event.
+        """Handle session logout event (producer-aligned).
         
-        When the controller logs out the session, we need to:
-        1. Mark session as invalid
-        2. Disconnect WebSocket
-        3. Preserve existing shutter state
-        4. Trigger reconnect and re-login
-        5. Rebuild device enumeration after successful reconnect
+        When /info/users/user/loggedOut is received:
+        - Mark session as invalid
+        - Log the event
+        - Do NOT immediately force reconnect
+        - Producer behavior: let next API call trigger restore if needed
+        - Preserve existing shutters and state
         """
         try:
-            _LOGGER.debug(f"[SESSION] Session logout detected")
-            
-            # Disconnect to force clean reconnect
-            await self.client.disconnect()
-            _LOGGER.debug(f"[SESSION] Disconnected after logout")
-            
-            # Wait a moment before attempting reconnect
-            await asyncio.sleep(2)
-            
-            # Attempt reconnect with fresh login
-            _LOGGER.debug(f"[SESSION] reconnect started")
-            if not await self.client.connect():
-                _LOGGER.error(f"[SESSION] reconnect failed")
-                return
-            
-            _LOGGER.debug(f"[SESSION] reconnect succeeded")
-            
-            # Refresh device enumeration after successful reconnect
-            _LOGGER.debug(f"[SESSION] Refreshing device list after reconnect")
-            await self.async_refresh(force_refresh=True)
+            _LOGGER.debug(f"[SESSION] loggedOut received - session marked invalid")
+            _LOGGER.debug(f"[SESSION] Next API request will trigger session restore if needed")
             
         except Exception as e:
             _LOGGER.error(f"[SESSION] Error handling logout: {e}", exc_info=True)

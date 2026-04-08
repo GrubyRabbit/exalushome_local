@@ -2,6 +2,26 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.18] - 2026-04-08
+
+### Fixed
+- Add producer-aligned /system/ping keepalive every 5 seconds
+- Keep session alive during idle periods
+- Track last received packet time to avoid unnecessary ping spam
+- Simplify logout handling: mark session invalid instead of aggressive reconnect
+- Producer-aligned session restore: triggered by next API request, not logout event
+- Preserve shutters and state during session operations
+
+### Keepalive behavior:
+- Ping sent every 5 seconds if no recent traffic
+- Skips ping if packet received within 5 seconds
+- Matches LocalNetworkExalusConnectionService._pingInterval
+
+### Session recovery:
+- /info/users/user/loggedOut marks session invalid
+- Next required API action (fetch_devices, send_command) triggers restore
+- Session restore maintains shutter cache
+
 ## [v0.0.17] - 2026-04-08
 
 ### Fixed
