@@ -2,6 +2,14 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.13] - 2026-04-08
+
+### Fixed
+- Shutter unique_id/storage key format to use numeric channel.number
+- Previously used channel object representation, causing key mismatch
+- Now format: <DeviceGuid>_<channel_number> consistently
+- State events now correctly match stored shutter entities
+
 ## [v0.0.12] - 2026-04-08
 
 ### Fixed
