@@ -92,19 +92,19 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         """Return current position (0-100, HA scale: 0=closed, 100=open)."""
         if self._shutter.available:
             pos = self._shutter.current_position
-            _LOGGER.debug(f"[COVER] {self._shutter.unique_id} current_cover_position={pos}")
+            _LOGGER.debug(f"[STATE-COVER] {self._shutter.unique_id} current_cover_position={pos} (from shutter.current_position)")
             return pos
-        _LOGGER.debug(f"[COVER] {self._shutter.unique_id} not available")
+        _LOGGER.debug(f"[STATE-COVER] {self._shutter.unique_id} not available")
         return None
     
     @property
     def is_closed(self) -> Optional[bool]:
         """Return whether cover is closed (HA: 0=closed, 100=open)."""
         if not self._shutter.available:
-            _LOGGER.debug(f"[COVER] {self._shutter.unique_id} is_closed=None (unavailable)")
+            _LOGGER.debug(f"[STATE-COVER] {self._shutter.unique_id} is_closed=None (unavailable)")
             return None
         closed = self._shutter.current_position == 0
-        _LOGGER.debug(f"[COVER] {self._shutter.unique_id} is_closed={closed} (pos={self._shutter.current_position})")
+        _LOGGER.debug(f"[STATE-COVER] {self._shutter.unique_id} is_closed={closed} (shutter.position={self._shutter.current_position})")
         return closed
     
     @property
@@ -115,9 +115,9 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         - Last command was close (102) AND
         - Device is still moving
         """
-        if not self._shutter.is_moving:
-            return False
-        return self._last_command == BLIND_CONTROL_CLOSE
+        result = self._shutter.is_moving and self._last_command == BLIND_CONTROL_CLOSE
+        _LOGGER.debug(f"[STATE-COVER] {self._shutter.unique_id} is_closing={result} (moving={self._shutter.is_moving}, last_cmd={self._last_command})")
+        return result
     
     @property
     def is_opening(self) -> bool:
@@ -127,9 +127,9 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         - Last command was open (101) AND
         - Device is still moving
         """
-        if not self._shutter.is_moving:
-            return False
-        return self._last_command == BLIND_CONTROL_OPEN
+        result = self._shutter.is_moving and self._last_command == BLIND_CONTROL_OPEN
+        _LOGGER.debug(f"[STATE-COVER] {self._shutter.unique_id} is_opening={result} (moving={self._shutter.is_moving}, last_cmd={self._last_command})")
+        return result
     
     @property
     def available(self) -> bool:

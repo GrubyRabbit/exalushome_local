@@ -324,7 +324,21 @@ class ExalusLocalClient:
                 data_type = message_data.get("DataType")
                 _LOGGER.debug(f"[STATE] DataType: {data_type}")
                 if data_type == STATE_DATA_TYPE_BLIND_POSITION:
-                    _LOGGER.debug(f"[STATE] BlindPosition detected, calling handler")
+                    _LOGGER.debug(f"[STATE-RAW] BlindPosition frame detected")
+                    _LOGGER.debug(f"[STATE-RAW] FULL RAW FRAME: {json.dumps(data, indent=2)}")
+                    
+                    device_guid = message_data.get("DeviceGuid")
+                    state_obj = message_data.get("state", {})
+                    channel = state_obj.get("Channel")
+                    position = state_obj.get("Position")
+                    raw_position = state_obj.get("RawPosition")
+                    
+                    _LOGGER.debug(f"[STATE-RAW] PARSED: DeviceGuid={device_guid}")
+                    _LOGGER.debug(f"[STATE-RAW] PARSED: DataType={data_type}")
+                    _LOGGER.debug(f"[STATE-RAW] PARSED: state.Channel={channel}")
+                    _LOGGER.debug(f"[STATE-RAW] PARSED: state.Position={position}")
+                    _LOGGER.debug(f"[STATE-RAW] PARSED: state.RawPosition={raw_position}")
+                    
                     await self._on_blind_position_changed(message_data)
                 else:
                     _LOGGER.debug(f"[STATE] Ignoring non-BlindPosition DataType: {data_type}")
