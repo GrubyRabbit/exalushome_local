@@ -2,6 +2,13 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.7] - 2026-04-08
+
+### Added
+- Debug logging for blind state update pipeline
+- Trace websocket BlindPosition frames through to coordinator to cover entity
+- Logs at: frame reception, DataType parsing, callback notification, coordinator handler, property access
+
 ## [v0.0.6] - 2026-04-08
 
 ### Fixed
