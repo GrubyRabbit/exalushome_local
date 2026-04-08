@@ -128,15 +128,24 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         
         Args:
             state_data: State change data from /info/devices/device/state/changed with DataType=BlindPosition
+                Structure from library:
+                - DeviceGuid: device GUID
+                - DataType: "BlindPosition" (filtered by client)
+                - state: object containing:
+                  - Channel: channel number
+                  - Position: blind position (Exalus scale)
+                  - RawPosition: raw position value
+                  - StateReliability: state reliability enum
+                  - Time: timestamp
         """
         try:
             _LOGGER.debug(f"[STATE-COORD] Handler called with: {state_data}")
             
             device_guid = state_data.get("DeviceGuid")
-            channel = state_data.get("Channel")
             state_info = state_data.get("state", {})
+            channel = state_info.get("Channel")
             position_exalus = state_info.get("Position")
-            task_execution = state_info.get("TaskExecution", 0)
+            task_execution = state_data.get("TaskExecution", 0)
             
             _LOGGER.debug(
                 f"[STATE-COORD] Extracted: device={device_guid}, channel={channel}, "
