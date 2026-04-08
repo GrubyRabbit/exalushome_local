@@ -609,8 +609,9 @@ class ExalusLocalClient:
                     
                     for ch_obj in channels_list:
                         try:
-                            ch_number = ch_obj.get("Number", 0)
-                            ch_name = ch_obj.get("Name", f"Channel {ch_number}")
+                            # Use official API response fields from ChannelsConfiguration (library DevicesService.js line 714, 717)
+                            ch_number = ch_obj.get("Channel", 0)
+                            ch_name = ch_obj.get("ChannelName", f"Channel {ch_number}")
                             
                             # Check if device has blind control capability
                             # Evidence: AvailableTasks contains "IBlindPosition" or "IBlindPositionSimple" for blind channels
