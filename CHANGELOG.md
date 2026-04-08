@@ -2,6 +2,14 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.12] - 2026-04-08
+
+### Fixed
+- Device channel enumeration now uses correct ChannelsConfiguration array from API response
+- Previously looked for non-existent 'Channels' array, causing fallback to number=0
+- Now correctly uses element.ChannelsConfiguration items with Channel and ChannelName fields
+- State events now match correct blind entities based on real channel numbers
+
 ## [v0.0.11] - 2026-04-08
 
 ### Fixed
