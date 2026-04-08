@@ -67,29 +67,25 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
                     raise UpdateFailed("Cannot reconnect to controller")
             
             # Fetch devices from controller
-            # TODO: Implement actual device fetch from local API
             devices = await self.client.fetch_devices()
             
-            # Filter and map shutters
-            shutters = self._extract_shutters(devices)
-            self._shutters = shutters
+            # Update shutters: merge device metadata with existing websocket state
+            self._update_shutters_from_devices(devices)
             
-            return shutters
+            return self._shutters
             
         except Exception as e:
             _LOGGER.error(f"Update failed: {e}")
             raise UpdateFailed(f"Failed to update: {e}")
     
-    def _extract_shutters(self, devices: Dict[str, Device]) -> Dict[str, ShutterDevice]:
-        """Extract shutter devices from device list.
+    def _update_shutters_from_devices(self, devices: Dict[str, Device]):
+        """Update shutters from device list, preserving websocket state.
         
-        Args:
-            devices: Dictionary of devices
-        
-        Returns:
-            Dictionary of shutter devices mapped by unique ID
+        Merges device metadata into existing shutter objects.
+        Websocket state (position, moving) is preserved.
+        New shutters are added, unavailable ones are removed.
         """
-        shutters = {}
+        updated_shutters = {}
         
         for device_guid, device in devices.items():
             if not device.available:
@@ -99,14 +95,33 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             blind_channels = device.get_blind_channels()
             
             for channel in blind_channels:
-                shutter = ShutterDevice(
-                    device_guid=device_guid,
-                    device_name=device.name,
-                    channel=channel,
-                )
-                shutters[shutter.unique_id] = shutter
+                unique_id = f"{device_guid}_{channel}"
+                
+                if unique_id in self._shutters:
+                    # Existing shutter: keep websocket-updated state, update metadata
+                    shutter = self._shutters[unique_id]
+                    shutter.device_name = device.name
+                    shutter.channel = channel
+                    _LOGGER.debug(f"[UPDATE] Merged shutter {unique_id}: name={device.name}, channel={channel.number}")
+                else:
+                    # New shutter: create fresh
+                    shutter = ShutterDevice(
+                        device_guid=device_guid,
+                        device_name=device.name,
+                        channel=channel,
+                    )
+                    _LOGGER.debug(f"[UPDATE] New shutter {unique_id}: {device.name} ch{channel.number}")
+                
+                updated_shutters[unique_id] = shutter
         
-        return shutters
+        # Remove any shutters no longer in device list
+        removed = set(self._shutters.keys()) - set(updated_shutters.keys())
+        if removed:
+            _LOGGER.debug(f"[UPDATE] Removed shutters: {removed}")
+        
+        self._shutters = updated_shutters
+        _LOGGER.debug(f"[UPDATE] Shutters after merge: {len(self._shutters)} total")
+    
     
     async def _on_device_state_changed(self, state_data: Dict):
         """Handle device state changed event from WebSocket.
