@@ -334,13 +334,23 @@ class ExalusLocalClient:
         """Handle blind position changed event.
         
         Args:
-            state_data: Data from the state change event containing:
+            state_data: Data from /info/devices/device/state/changed with DataType=BlindPosition
                 - DeviceGuid: device GUID
                 - Channel: channel number
                 - state.Position: position value (Exalus scale: 0=open, 100=closed)
+                - state.TaskExecution: 0=idle, 1=executing/moving
                 - Other state information
         """
-        _LOGGER.debug(f"Blind position changed: {state_data}")
+        device_guid = state_data.get("DeviceGuid", "?")
+        channel = state_data.get("Channel", "?")
+        state_info = state_data.get("state", {})
+        position_exalus = state_info.get("Position", "?")
+        task_execution = state_info.get("TaskExecution", "?")
+        
+        _LOGGER.debug(
+            f"Blind position changed: device={device_guid}, channel={channel}, "
+            f"Exalus_Position={position_exalus}, TaskExecution={task_execution}"
+        )
         self._notify_state_changed(state_data)
     
     async def send_command(

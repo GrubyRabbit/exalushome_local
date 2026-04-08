@@ -64,6 +64,7 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         """Initialize cover entity."""
         super().__init__(coordinator)
         self._shutter = shutter
+        self._last_command = None  # Track last command: 101=open, 102=close, 103=stop
         
         # Set device class to shutter
         self._attr_device_class = CoverDeviceClass.SHUTTER
@@ -107,17 +108,27 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
     
     @property
     def is_closing(self) -> bool:
-        """Return whether cover is closing."""
-        # TODO: Implement based on state tracking
-        # Currently cannot distinguish close from open movement
-        return False
+        """Return whether cover is closing.
+        
+        Returns True if:
+        - Last command was close (102) AND
+        - Device is still moving
+        """
+        if not self._shutter.is_moving:
+            return False
+        return self._last_command == BLIND_CONTROL_CLOSE
     
     @property
     def is_opening(self) -> bool:
-        """Return whether cover is opening."""
-        # For now, if moving and not closing, assume opening
-        # TODO: Implement proper direction tracking
-        return self._shutter.is_moving
+        """Return whether cover is opening.
+        
+        Returns True if:
+        - Last command was open (101) AND
+        - Device is still moving
+        """
+        if not self._shutter.is_moving:
+            return False
+        return self._last_command == BLIND_CONTROL_OPEN
     
     @property
     def available(self) -> bool:
@@ -136,7 +147,8 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         )
         
         if success:
-            # Mark as moving; wait for WebSocket state update for final position
+            # Track command and mark as moving; wait for WebSocket state update for final position
+            self._last_command = BLIND_CONTROL_OPEN
             self._shutter.is_moving = True
             self.async_write_ha_state()
         else:
@@ -154,7 +166,8 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         )
         
         if success:
-            # Mark as moving; wait for WebSocket state update for final position
+            # Track command and mark as moving; wait for WebSocket state update for final position
+            self._last_command = BLIND_CONTROL_CLOSE
             self._shutter.is_moving = True
             self.async_write_ha_state()
         else:

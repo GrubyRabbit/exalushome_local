@@ -112,13 +112,16 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         """Handle device state changed event from WebSocket.
         
         Args:
-            state_data: State change data containing:
+            state_data: State change data from /info/devices/device/state/changed event
                 - DeviceGuid: device GUID
                 - Channel: channel number
                 - state.Position: Exalus position (0=open, 100=closed)
-                - state.TaskExecution: task execution state
+                - state.TaskExecution: task execution state (0=idle, 1=executing)
         """
         try:
+            # Debug: log raw event
+            _LOGGER.debug(f"Raw state event: {state_data}")
+            
             device_guid = state_data.get("DeviceGuid")
             channel = state_data.get("Channel")
             state_info = state_data.get("state", {})
@@ -136,17 +139,26 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
                 return
             
             shutter = self._shutters[unique_id]
+            old_position = shutter.current_position
+            old_moving = shutter.is_moving
             
             # Update position if provided (convert from Exalus to HA scale)
+            # Exalus: 0=open, 100=closed
+            # HA: 100=open, 0=closed
             if position_exalus is not None:
                 shutter.current_position = exalus_to_ha_position(position_exalus)
+                _LOGGER.debug(
+                    f"Position update: Exalus={position_exalus} → HA={shutter.current_position}"
+                )
             
-            # Update moving state
+            # Update moving state (0=idle/stopped, 1=executing/moving)
             shutter.is_moving = task_execution != 0
             
             _LOGGER.debug(
-                f"Updated {unique_id}: position={shutter.current_position}, "
-                f"moving={shutter.is_moving}"
+                f"State updated {unique_id}: "
+                f"position {old_position}→{shutter.current_position}, "
+                f"moving {old_moving}→{shutter.is_moving}, "
+                f"TaskExecution={task_execution}"
             )
             
             # Trigger coordinator update to notify entities

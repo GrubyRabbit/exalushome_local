@@ -2,6 +2,26 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.6] - 2026-04-08
+
+### Fixed
+- Cover state mapping: Exalus position now correctly inverted to HA scale
+- is_opening and is_closing now based on last command + movement state
+- Position updates from websocket state events now correctly update HA current_cover_position
+- TaskExecution state (0=idle, 1=moving) now properly tracked
+- Cover no longer stuck in opening/closing state after reaching final position
+
+### Added
+- Command tracking: _last_command stores 101/102/103 to determine direction
+- Enhanced debug logging for state events: raw event, position conversion, TaskExecution state
+- Debug logs for state transitions and final settled positions
+
+### Changed
+- is_opening returns True only if (last_command==OPEN) AND is_moving
+- is_closing returns True only if (last_command==CLOSE) AND is_moving
+- Coordinator state handler now logs position conversions and TaskExecution changes
+- Client blind position handler logs DeviceGuid, Channel, Position, TaskExecution for debugging
+
 ## [v0.0.5] - 2026-04-08
 
 ### Fixed
