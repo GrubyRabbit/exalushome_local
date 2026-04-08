@@ -2,6 +2,18 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.8] - 2026-04-08
+
+### Fixed
+- Loss of live blind state during coordinator refresh cycle
+- Preserve websocket-updated shutter objects instead of recreating them
+- Prevent current position from resetting to 0/closed after refresh
+- WebSocket state remains source of truth for position and movement
+
+### Changed
+- _async_update_data() now merges device metadata into existing shutter objects
+- Websocket events update state independently from device enumeration
+
 ## [v0.0.7] - 2026-04-08
 
 ### Added
