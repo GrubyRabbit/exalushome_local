@@ -2,6 +2,16 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.5] - 2026-04-08
+
+### Fixed
+- Missing _receive_loop method definition causing 'ExalusLocalClient' object has no attribute '_receive_loop' error
+- WebSocket inbound message receive loop now properly started after connection
+- Restored websocket frame reception for state updates and response handling
+
+### Changed
+- Async receive task creation now points to correctly defined _receive_loop method
+
 ## [v0.0.4] - 2026-04-07
 
 ### Fixed
