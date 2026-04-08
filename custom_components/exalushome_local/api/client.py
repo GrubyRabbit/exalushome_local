@@ -25,6 +25,7 @@ WEBSOCKET_RESOURCE_CONTROL = "/devices/device/control"
 WEBSOCKET_RESOURCE_STATE_CHANGED = "/info/devices/device/state/changed"
 WEBSOCKET_RESOURCE_LOGIN = "/users/user/login"
 WEBSOCKET_RESOURCE_DEVICES_LIST = "/devices/list"
+WEBSOCKET_RESOURCE_LOGOUT = "/info/users/user/loggedOut"
 
 # IDataFrame method enum
 METHOD_GET = 0
@@ -80,6 +81,7 @@ class ExalusLocalClient:
         self._devices: Dict[str, Device] = {}
         self._state_callbacks = []
         self._connection_callbacks = []
+        self._logout_callbacks = []
         self._receive_task = None
         self._pending_responses: Dict[str, asyncio.Future] = {}  # TransactionId -> Future
         self._session_login_event: Optional[asyncio.Event] = None
@@ -342,6 +344,11 @@ class ExalusLocalClient:
                     await self._on_blind_position_changed(message_data)
                 else:
                     _LOGGER.debug(f"[STATE] Ignoring non-BlindPosition DataType: {data_type}")
+            elif resource == WEBSOCKET_RESOURCE_LOGOUT:
+                # Session logged out event
+                _LOGGER.debug(f"[SESSION] loggedOut received")
+                self._session_logged_in = False
+                self._notify_logout()
             else:
                 _LOGGER.debug(f"[STATE] Ignoring message with resource: {resource}")
                 
@@ -436,6 +443,14 @@ class ExalusLocalClient:
         """
         self._connection_callbacks.append(callback)
     
+    def on_logout(self, callback: Callable):
+        """Register logout callback.
+        
+        Args:
+            callback: Async function() called when session is logged out
+        """
+        self._logout_callbacks.append(callback)
+    
     def _notify_state_changed(self, state_data: Dict[str, Any]):
         """Notify all state change listeners."""
         _LOGGER.debug(f"[STATE] Notifying {len(self._state_callbacks)} callback(s) with state_data")
@@ -452,6 +467,14 @@ class ExalusLocalClient:
                 asyncio.create_task(callback(connected))
             except Exception as e:
                 _LOGGER.error(f"Callback error: {e}")
+    
+    def _notify_logout(self):
+        """Notify all logout listeners."""
+        for callback in self._logout_callbacks:
+            try:
+                asyncio.create_task(callback())
+            except Exception as e:
+                _LOGGER.error(f"Logout callback error: {e}")
     
     async def fetch_devices(self) -> Dict[str, Device]:
         """Fetch device list from controller.

@@ -2,6 +2,16 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.17] - 2026-04-08
+
+### Fixed
+- Handle /info/users/user/loggedOut websocket events
+- Automatically reconnect and restore session after controller logout
+- Preserve shutters across session recovery
+- Add [SESSION] debug logs for logout detection and reconnect flow
+- Mark session as invalid when logout event received
+- Trigger device enumeration refresh after successful reconnect
+
 ## [v0.0.16] - 2026-04-08
 
 ### Fixed

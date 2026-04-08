@@ -62,6 +62,9 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             # Register state change callback
             self.client.on_state_changed(self._on_device_state_changed)
             
+            # Register logout callback for session recovery
+            self.client.on_logout(self._on_session_logout)
+            
             _LOGGER.debug(f"[REFRESH] Startup refresh beginning")
             result = await super().async_config_entry_first_refresh()
             self._startup_complete = True
@@ -225,6 +228,41 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             
         except Exception as e:
             _LOGGER.error(f"[STATE-COORD] Error: {e}", exc_info=True)
+    
+    async def _on_session_logout(self):
+        """Handle session logout event.
+        
+        When the controller logs out the session, we need to:
+        1. Mark session as invalid
+        2. Disconnect WebSocket
+        3. Preserve existing shutter state
+        4. Trigger reconnect and re-login
+        5. Rebuild device enumeration after successful reconnect
+        """
+        try:
+            _LOGGER.debug(f"[SESSION] Session logout detected")
+            
+            # Disconnect to force clean reconnect
+            await self.client.disconnect()
+            _LOGGER.debug(f"[SESSION] Disconnected after logout")
+            
+            # Wait a moment before attempting reconnect
+            await asyncio.sleep(2)
+            
+            # Attempt reconnect with fresh login
+            _LOGGER.debug(f"[SESSION] reconnect started")
+            if not await self.client.connect():
+                _LOGGER.error(f"[SESSION] reconnect failed")
+                return
+            
+            _LOGGER.debug(f"[SESSION] reconnect succeeded")
+            
+            # Refresh device enumeration after successful reconnect
+            _LOGGER.debug(f"[SESSION] Refreshing device list after reconnect")
+            await self.async_refresh(force_refresh=True)
+            
+        except Exception as e:
+            _LOGGER.error(f"[SESSION] Error handling logout: {e}", exc_info=True)
     
     async def send_command(
         self,
