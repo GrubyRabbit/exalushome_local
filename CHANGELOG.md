@@ -2,6 +2,13 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.9] - 2026-04-08
+
+### Fixed
+- State event parsing: Channel field moved from root to state object
+- DeviceStateChangedObject structure from library has state.Channel, not root Channel
+- Blind position updates now correctly parsed from websocket frames
+
 ## [v0.0.8] - 2026-04-08
 
 ### Fixed
