@@ -285,6 +285,8 @@ class ExalusLocalClient:
         except Exception as e:
             _LOGGER.error(f"Session creation failed: {e}")
             return False
+    
+    async def _receive_loop(self):
         """Receive loop for WebSocket messages."""
         try:
             while self._connected and self.websocket:
