@@ -91,20 +91,21 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
     def current_cover_position(self) -> Optional[int]:
         """Return current position (0-100, HA scale: 0=closed, 100=open)."""
         if self._shutter.available:
-            return self._shutter.current_position
+            pos = self._shutter.current_position
+            _LOGGER.debug(f"[COVER] {self._shutter.unique_id} current_cover_position={pos}")
+            return pos
+        _LOGGER.debug(f"[COVER] {self._shutter.unique_id} not available")
         return None
     
     @property
     def is_closed(self) -> Optional[bool]:
-        """Return whether cover is closed.
-        
-        In HA: position 0 = closed
-        In Exalus: position 100 = closed
-        So is_closed = (position == 0)
-        """
+        """Return whether cover is closed (HA: 0=closed, 100=open)."""
         if not self._shutter.available:
+            _LOGGER.debug(f"[COVER] {self._shutter.unique_id} is_closed=None (unavailable)")
             return None
-        return self._shutter.current_position == 0
+        closed = self._shutter.current_position == 0
+        _LOGGER.debug(f"[COVER] {self._shutter.unique_id} is_closed={closed} (pos={self._shutter.current_position})")
+        return closed
     
     @property
     def is_closing(self) -> bool:

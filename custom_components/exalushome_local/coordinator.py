@@ -112,15 +112,10 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         """Handle device state changed event from WebSocket.
         
         Args:
-            state_data: State change data from /info/devices/device/state/changed event
-                - DeviceGuid: device GUID
-                - Channel: channel number
-                - state.Position: Exalus position (0=open, 100=closed)
-                - state.TaskExecution: task execution state (0=idle, 1=executing)
+            state_data: State change data from /info/devices/device/state/changed with DataType=BlindPosition
         """
         try:
-            # Debug: log raw event
-            _LOGGER.debug(f"Raw state event: {state_data}")
+            _LOGGER.debug(f"[STATE-COORD] Handler called with: {state_data}")
             
             device_guid = state_data.get("DeviceGuid")
             channel = state_data.get("Channel")
@@ -128,44 +123,52 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             position_exalus = state_info.get("Position")
             task_execution = state_info.get("TaskExecution", 0)
             
+            _LOGGER.debug(
+                f"[STATE-COORD] Extracted: device={device_guid}, channel={channel}, "
+                f"position={position_exalus}, task_exec={task_execution}"
+            )
+            
             if device_guid is None or channel is None:
-                _LOGGER.debug("Invalid state data: missing DeviceGuid or Channel")
+                _LOGGER.debug(f"[STATE-COORD] Invalid: missing DeviceGuid or Channel")
                 return
             
             # Find matching shutter
             unique_id = f"{device_guid}_{channel}"
+            _LOGGER.debug(f"[STATE-COORD] Shutter unique_id: {unique_id}")
+            
             if unique_id not in self._shutters:
-                _LOGGER.debug(f"Unknown shutter: {unique_id}")
+                _LOGGER.debug(f"[STATE-COORD] Shutter not found in {list(self._shutters.keys())}")
                 return
             
             shutter = self._shutters[unique_id]
             old_position = shutter.current_position
             old_moving = shutter.is_moving
             
+            _LOGGER.debug(f"[STATE-COORD] Shutter found: old_pos={old_position}, old_moving={old_moving}")
+            
             # Update position if provided (convert from Exalus to HA scale)
-            # Exalus: 0=open, 100=closed
-            # HA: 100=open, 0=closed
             if position_exalus is not None:
                 shutter.current_position = exalus_to_ha_position(position_exalus)
                 _LOGGER.debug(
-                    f"Position update: Exalus={position_exalus} → HA={shutter.current_position}"
+                    f"[STATE-COORD] Position updated: Exalus={position_exalus} → HA={shutter.current_position}"
                 )
+            else:
+                _LOGGER.debug(f"[STATE-COORD] Position=None, not updating")
             
-            # Update moving state (0=idle/stopped, 1=executing/moving)
+            # Update moving state
             shutter.is_moving = task_execution != 0
             
             _LOGGER.debug(
-                f"State updated {unique_id}: "
-                f"position {old_position}→{shutter.current_position}, "
-                f"moving {old_moving}→{shutter.is_moving}, "
-                f"TaskExecution={task_execution}"
+                f"[STATE-COORD] Final state: pos={shutter.current_position}, "
+                f"moving={shutter.is_moving}, changed={old_position != shutter.current_position or old_moving != shutter.is_moving}"
             )
             
             # Trigger coordinator update to notify entities
             self.async_set_updated_data(self._shutters)
+            _LOGGER.debug(f"[STATE-COORD] Coordinator updated")
             
         except Exception as e:
-            _LOGGER.error(f"Error processing state change: {e}")
+            _LOGGER.error(f"[STATE-COORD] Error: {e}", exc_info=True)
     
     async def send_command(
         self,

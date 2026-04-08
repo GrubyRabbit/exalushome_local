@@ -313,17 +313,23 @@ class ExalusLocalClient:
             
             # Route by Resource field (IDataFrame protocol)
             resource = data.get("Resource")
+            _LOGGER.debug(f"[STATE] Inbound frame: Resource={resource}")
             
             if resource == WEBSOCKET_RESOURCE_STATE_CHANGED:
                 # Device state changed event
                 message_data = data.get("Data", {})
+                _LOGGER.debug(f"[STATE] State changed event Data: {message_data}")
                 
                 # Check if this is a BlindPosition update
                 data_type = message_data.get("DataType")
+                _LOGGER.debug(f"[STATE] DataType: {data_type}")
                 if data_type == STATE_DATA_TYPE_BLIND_POSITION:
+                    _LOGGER.debug(f"[STATE] BlindPosition detected, calling handler")
                     await self._on_blind_position_changed(message_data)
+                else:
+                    _LOGGER.debug(f"[STATE] Ignoring non-BlindPosition DataType: {data_type}")
             else:
-                _LOGGER.debug(f"Ignoring message with resource: {resource}")
+                _LOGGER.debug(f"[STATE] Ignoring message with resource: {resource}")
                 
         except json.JSONDecodeError:
             _LOGGER.debug(f"Failed to parse message: {msg}")
@@ -418,6 +424,7 @@ class ExalusLocalClient:
     
     def _notify_state_changed(self, state_data: Dict[str, Any]):
         """Notify all state change listeners."""
+        _LOGGER.debug(f"[STATE] Notifying {len(self._state_callbacks)} callback(s) with state_data")
         for callback in self._state_callbacks:
             try:
                 asyncio.create_task(callback(state_data))
