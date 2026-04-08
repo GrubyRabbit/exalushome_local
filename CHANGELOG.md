@@ -2,6 +2,14 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.11] - 2026-04-08
+
+### Fixed
+- Blind channel parsing from official device enumeration model
+- Use ChannelsConfiguration.Channel instead of fallback Number-based parsing
+- Use ChannelsConfiguration.ChannelName for channel display name
+- State events now correctly matched to corresponding blind entities
+
 ## [v0.0.10] - 2026-04-08
 
 ### Added
