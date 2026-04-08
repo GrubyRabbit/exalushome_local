@@ -589,16 +589,17 @@ class ExalusLocalClient:
                         _LOGGER.debug("Skipping device without GUID")
                         continue
                     
-                    # Parse channels - field name from npm: ChannelsNumber, Channels array
+                    # Parse channels - field name from npm: ChannelsConfiguration array
                     channels_count = device_obj.get("ChannelsNumber", 0)
-                    channels_list = device_obj.get("Channels", [])
+                    channels_config = device_obj.get("ChannelsConfiguration", [])
                     
-                    # If Channels array not in response, infer from ChannelsNumber
-                    if not channels_list and channels_count > 0:
-                        channels_list = [
+                    # If ChannelsConfiguration is present, use it (library evidence: DevicesService.js line 710)
+                    # If not, infer from ChannelsNumber as fallback
+                    if not channels_config and channels_count > 0:
+                        channels_config = [
                             {
-                                "Number": i,
-                                "Name": f"Channel {i}",
+                                "Channel": i,
+                                "ChannelName": f"Channel {i}",
                             }
                             for i in range(channels_count)
                         ]
@@ -607,8 +608,10 @@ class ExalusLocalClient:
                     channel_list = []
                     available_tasks = device_obj.get("AvailableTasks", [])
                     
-                    for ch_obj in channels_list:
+                    for ch_obj in channels_config:
                         try:
+                            _LOGGER.debug(f"[ENUM] Parsing channel config: {ch_obj}")
+                            
                             # Use official API response fields from ChannelsConfiguration (library DevicesService.js line 714, 717)
                             ch_number = ch_obj.get("Channel", 0)
                             ch_name = ch_obj.get("ChannelName", f"Channel {ch_number}")
