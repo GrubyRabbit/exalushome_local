@@ -2,6 +2,19 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.16] - 2026-04-08
+
+### Fixed
+- Fully disable automatic coordinator refresh after startup
+- Override async_refresh() to block Home Assistant's automatic refresh mechanism
+- Add _startup_complete flag to track initialization state
+- Add [REFRESH] debug logs showing blocked/allowed refresh reasons
+- Prevent repeated /devices/list timeouts during normal runtime
+
+### Device list refresh now triggered only on:
+- Initial integration setup (async_config_entry_first_refresh)
+- Explicit reconnect after websocket disconnect (force_refresh=True)
+
 ## [v0.0.15] - 2026-04-08
 
 ### Fixed
