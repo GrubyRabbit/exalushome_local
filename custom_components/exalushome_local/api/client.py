@@ -351,17 +351,34 @@ class ExalusLocalClient:
             _LOGGER.error(f"Ping loop error: {e}")
     
     async def _send_ping(self):
-        """Send /system/ping keepalive frame."""
+        """Send /system/ping keepalive frame and wait for response.
+        
+        Matches producer: SendAndWaitForResponseAsync(frame, 2000, false, false)
+        Returns True if response received, False on timeout or error.
+        """
         try:
+            transaction_id = str(uuid.uuid4())
             ping_frame = {
-                "TransactionId": str(uuid.uuid4()),
+                "TransactionId": transaction_id,
                 "Resource": "/system/ping",
                 "Method": METHOD_GET,
             }
             
+            # Register pending response future before sending
+            loop = asyncio.get_event_loop()
+            future = loop.create_future()
+            self._pending_responses[transaction_id] = future
+            
             msg = json.dumps(ping_frame)
             await self.websocket.send(msg)
-            _LOGGER.debug(f"[PING] ping sent")
+            
+            # Wait up to 2s for response (producer: 2000ms timeout)
+            try:
+                await asyncio.wait_for(asyncio.shield(future), timeout=2.0)
+                _LOGGER.debug(f"[PING] ping sent")
+            except asyncio.TimeoutError:
+                self._pending_responses.pop(transaction_id, None)
+                _LOGGER.debug(f"[PING] ping failed: no response within 2s")
         except Exception as e:
             _LOGGER.error(f"[PING] failed to send ping: {e}")
             raise
@@ -438,21 +455,24 @@ class ExalusLocalClient:
         
         Args:
             state_data: Data from /info/devices/device/state/changed with DataType=BlindPosition
+                Official BlindPostionState fields:
                 - DeviceGuid: device GUID
-                - Channel: channel number
-                - state.Position: position value (Exalus scale: 0=open, 100=closed)
-                - state.TaskExecution: 0=idle, 1=executing/moving
-                - Other state information
+                - state.Channel: channel number
+                - state.Position: blind position (Exalus scale: 0=open, 100=closed)
+                - state.RawPosition: raw position value
+                - state.StateReliability: state reliability
+                - state.Time: timestamp
+                Note: TaskExecution is NOT part of the state object — movement state
+                comes from /info/devices/tasks events.
         """
         device_guid = state_data.get("DeviceGuid", "?")
-        channel = state_data.get("Channel", "?")
         state_info = state_data.get("state", {})
+        channel = state_info.get("Channel", "?")
         position_exalus = state_info.get("Position", "?")
-        task_execution = state_info.get("TaskExecution", "?")
         
         _LOGGER.debug(
-            f"Blind position changed: device={device_guid}, channel={channel}, "
-            f"Exalus_Position={position_exalus}, TaskExecution={task_execution}"
+            f"[LIVE] state event received: device={device_guid}, channel={channel}, "
+            f"Exalus_Position={position_exalus}"
         )
         self._notify_state_changed(state_data)
     

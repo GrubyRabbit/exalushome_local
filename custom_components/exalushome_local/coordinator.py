@@ -240,7 +240,11 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         try:
             _LOGGER.debug(f"[LIVE] task event received: {tasks_data}")
             
-            # Parse executing tasks into a set of unique_ids
+            # Parse executing tasks — matches official ParseDeviceTaskInfo behavior:
+            # - Each entry is "DeviceGuid;Channel"
+            # - If Channel == 0: means ALL channels of that device are executing
+            #   Official: device.Channels.forEach(channel => { task.Channel = channel.Number; ... })
+            # - Otherwise: specific channel is executing
             executing = set()
             for entry in tasks_data:
                 if ";" in str(entry):
@@ -249,7 +253,14 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
                     channel_str = parts[1].strip()
                     try:
                         channel = int(channel_str)
-                        executing.add(f"{guid}_{channel}")
+                        if channel == 0:
+                            # Channel 0 means ALL channels of this device — expand to all known shutters
+                            for uid in self._shutters:
+                                if uid.startswith(f"{guid}_"):
+                                    executing.add(uid)
+                                    _LOGGER.debug(f"[LIVE] channel=0 expansion: marking {uid} as executing")
+                        else:
+                            executing.add(f"{guid}_{channel}")
                     except ValueError:
                         _LOGGER.debug(f"[LIVE] Could not parse channel from task entry: {entry}")
             

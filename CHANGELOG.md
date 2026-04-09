@@ -2,6 +2,16 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.1.0]
+
+### Fixed
+- Improve live blind state using official producer event model
+- Improve opening/closing detection based on /info/devices/tasks (official source of truth)
+- Handle Channel=0 task entries correctly: expand to all channels of that device (matches ParseDeviceTaskInfo)
+- Align keepalive ping with official producer: wait for response with 2s timeout
+- Remove stale TaskExecution field read from BlindPosition state events (field does not exist)
+- Position updates from /info/devices/device/state/changed remain unchanged
+
 ## [v0.0.19]
 
 ### Fixed
