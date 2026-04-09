@@ -1,5 +1,6 @@
 """Coordinator for ExalusHome Local integration."""
 
+import asyncio
 import logging
 from datetime import timedelta
 from typing import Dict, List, Optional
@@ -51,6 +52,10 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         self._serial = serial
         self._shutters: Dict[str, ShutterDevice] = {}
         self._startup_complete = False
+        # Per-shutter monotonic counter: incremented on every non-empty task event.
+        # Used by tasks=[] handler to detect if a newer movement event arrived before
+        # the deferred stop is applied (event-ordering, not timeout-based).
+        self._task_generation: Dict[str, int] = {}
         
     async def async_config_entry_first_refresh(self) -> bool:
         """Perform first refresh on config entry setup."""
@@ -205,18 +210,47 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
     async def _on_device_tasks_changed(self, tasks_data: list):
         """Handle device tasks changed event from WebSocket.
 
-        Non-empty tasks => is_moving=True for matching shutters (movement started).
-        tasks=[] is ignored — not a confirmed stop signal on this controller.
+        Movement start: non-empty tasks => is_moving=True, bump per-shutter generation.
+        Movement stop: tasks=[] => deferred stop using event-ordering via generation counter.
+          - Capture current generation for each moving shutter.
+          - Yield one event-loop iteration (asyncio.sleep(0)) so any already-queued
+            non-empty task event can be dispatched and processed first.
+          - Apply is_moving=False only if generation is unchanged (no newer start arrived).
+          No timeouts are used — purely producer event ordering.
         """
         try:
             _LOGGER.debug(f"[LIVE] task event received: {tasks_data}")
 
             if not tasks_data:
-                _LOGGER.debug(f"[LIVE] task event empty — ignored")
+                # tasks=[] — potential stop signal; check ordering before applying
+                moving = [(uid, self._task_generation.get(uid, 0))
+                          for uid, s in self._shutters.items() if s.is_moving]
+                if not moving:
+                    _LOGGER.debug("[LIVE] task event empty — no shutters moving, ignored")
+                    return
+
+                _LOGGER.debug(f"[LIVE] task event empty — deferred stop pending for {[u for u, _ in moving]}")
+
+                async def _apply_stop_if_current(uid: str, gen: int) -> None:
+                    await asyncio.sleep(0)  # yield once; lets queued non-empty task events run first
+                    current_gen = self._task_generation.get(uid, 0)
+                    if current_gen != gen:
+                        _LOGGER.debug(
+                            f"[LIVE] stop ignored for {uid} — newer task event arrived "
+                            f"(gen {current_gen} > {gen})"
+                        )
+                        return
+                    shutter = self._shutters.get(uid)
+                    if shutter and shutter.is_moving:
+                        _LOGGER.debug(f"[LIVE] stop applied for {uid} (generation {gen} still current)")
+                        shutter.is_moving = False
+                        self.async_set_updated_data(self._shutters)
+
+                for uid, gen in moving:
+                    self.hass.async_create_task(_apply_stop_if_current(uid, gen))
                 return
 
-            # Parse executing tasks — split on ";" and take first two non-empty tokens
-            # Runtime format: "bfacc80a-8549-432e-9165-0cf75e8b9a4a;1;" (trailing semicolon)
+            # Non-empty tasks — parse and mark movement start
             executing = set()
             for entry in tasks_data:
                 tokens = [t.strip() for t in str(entry).split(";") if t.strip()]
@@ -240,9 +274,11 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             if not executing:
                 return
 
-            _LOGGER.debug(f"[LIVE] movement updated: executing={executing}")
+            _LOGGER.debug(f"[LIVE] movement start: executing={executing}")
             changed = False
             for uid in executing:
+                # Bump generation so any pending tasks=[] stop for this shutter is invalidated
+                self._task_generation[uid] = self._task_generation.get(uid, 0) + 1
                 if uid in self._shutters and not self._shutters[uid].is_moving:
                     self._shutters[uid].is_moving = True
                     changed = True

@@ -2,14 +2,14 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
-## [v0.1.7]
+## [v0.1.8]
 
-### Changed
-- Removed artificial inactivity-based stop detection
-- Reverted movement handling to producer-backed websocket signals only
-- Stopped simulating blind stop based on local timeout
-- tasks=[] continues to be ignored (not a confirmed stop signal on this controller)
-- Position updates applied directly from BlindPosition events, no inference
+### Fixed
+- Restored producer-backed stop handling from /info/devices/tasks empty events
+- Fixed movement state using websocket event ordering instead of artificial timeout
+- Per-shutter generation counter: non-empty task bumps generation; tasks=[] stop is only
+  applied if no newer non-empty task event arrived (checked after one event-loop yield)
+- Kept live position updates based only on real BlindPosition events
 
 ## [v0.1.0]
 
