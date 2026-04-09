@@ -2,14 +2,14 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
-## [v0.1.8]
+## [v0.1.9]
 
-### Fixed
-- Restored producer-backed stop handling from /info/devices/tasks empty events
-- Fixed movement state using websocket event ordering instead of artificial timeout
-- Per-shutter generation counter: non-empty task bumps generation; tasks=[] stop is only
-  applied if no newer non-empty task event arrived (checked after one event-loop yield)
-- Kept live position updates based only on real BlindPosition events
+### Changed
+- Removed all custom stop-detection logic (generation counters, asyncio.sleep(0), deferred tasks)
+- Movement state now directly mirrors official library DeviceChannel._onTasksExecutionChangedEvent
+- tasks non-empty: is_moving=True for shutters in the executing set
+- tasks []: is_moving=False for all shutters not in the executing set (direct, no deferral)
+- Position updates from BlindPosition events only, no inference
 
 ## [v0.1.0]
 
