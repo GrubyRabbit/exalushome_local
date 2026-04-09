@@ -27,6 +27,7 @@ WEBSOCKET_RESOURCE_STATE_CHANGED = "/info/devices/device/state/changed"
 WEBSOCKET_RESOURCE_LOGIN = "/users/user/login"
 WEBSOCKET_RESOURCE_DEVICES_LIST = "/devices/list"
 WEBSOCKET_RESOURCE_LOGOUT = "/info/users/user/loggedOut"
+WEBSOCKET_RESOURCE_TASKS = "/info/devices/tasks"
 
 # IDataFrame method enum
 METHOD_GET = 0
@@ -83,6 +84,7 @@ class ExalusLocalClient:
         self._state_callbacks = []
         self._connection_callbacks = []
         self._logout_callbacks = []
+        self._task_callbacks = []
         self._receive_task = None
         self._ping_task = None
         self._last_received_packet_time: Optional[float] = None
@@ -416,6 +418,13 @@ class ExalusLocalClient:
                 _LOGGER.debug(f"[SESSION] loggedOut received")
                 self._session_logged_in = False
                 self._notify_logout()
+            elif resource == WEBSOCKET_RESOURCE_TASKS:
+                # Device tasks execution event — source of truth for movement state
+                # Data is an array of "DeviceGuid;Channel" strings for currently running tasks
+                # Empty array means all tasks stopped
+                tasks_data = data.get("Data", [])
+                _LOGGER.debug(f"[LIVE] task event received: {tasks_data}")
+                self._notify_task_changed(tasks_data)
             else:
                 _LOGGER.debug(f"[STATE] Ignoring message with resource: {resource}")
                 
@@ -518,6 +527,16 @@ class ExalusLocalClient:
         """
         self._logout_callbacks.append(callback)
     
+    def on_task_changed(self, callback: Callable):
+        """Register device tasks changed callback.
+        
+        Args:
+            callback: Async function(tasks: list) called when /info/devices/tasks fires.
+                      tasks is a list of "DeviceGuid;Channel" strings for currently running tasks.
+                      Empty list means all tasks have stopped.
+        """
+        self._task_callbacks.append(callback)
+    
     def _notify_state_changed(self, state_data: Dict[str, Any]):
         """Notify all state change listeners."""
         _LOGGER.debug(f"[STATE] Notifying {len(self._state_callbacks)} callback(s) with state_data")
@@ -542,6 +561,19 @@ class ExalusLocalClient:
                 asyncio.create_task(callback())
             except Exception as e:
                 _LOGGER.error(f"Logout callback error: {e}")
+    
+    def _notify_task_changed(self, tasks_data: list):
+        """Notify all device task change listeners.
+        
+        Args:
+            tasks_data: List of "DeviceGuid;Channel" strings for currently running tasks.
+                        Empty list means all tasks stopped.
+        """
+        for callback in self._task_callbacks:
+            try:
+                asyncio.create_task(callback(tasks_data))
+            except Exception as e:
+                _LOGGER.error(f"Task callback error: {e}")
     
     async def fetch_devices(self) -> Dict[str, Device]:
         """Fetch device list from controller.

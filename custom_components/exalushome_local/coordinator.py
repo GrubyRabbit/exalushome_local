@@ -62,6 +62,9 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             # Register state change callback
             self.client.on_state_changed(self._on_device_state_changed)
             
+            # Register tasks changed callback (source of truth for movement state)
+            self.client.on_task_changed(self._on_device_tasks_changed)
+            
             # Register logout callback for session recovery
             self.client.on_logout(self._on_session_logout)
             
@@ -183,13 +186,11 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             state_info = state_data.get("state", {})
             channel = state_info.get("Channel")
             position_exalus = state_info.get("Position")
-            task_execution = state_data.get("TaskExecution", 0)
             
             _LOGGER.debug(f"[STATE-COORD] Callback invoked")
             _LOGGER.debug(f"[STATE-COORD] DeviceGuid={device_guid}")
             _LOGGER.debug(f"[STATE-COORD] Channel={channel}")
             _LOGGER.debug(f"[STATE-COORD] Position={position_exalus}")
-            _LOGGER.debug(f"[STATE-COORD] TaskExecution={task_execution}")
             
             if device_guid is None or channel is None:
                 _LOGGER.debug(f"[STATE-COORD] SKIP: missing DeviceGuid or Channel")
@@ -206,19 +207,17 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             
             shutter = self._shutters[unique_id]
             old_position = shutter.current_position
-            old_moving = shutter.is_moving
             
-            _LOGGER.debug(f"[STATE-COORD] Shutter BEFORE: position={old_position}, moving={old_moving}")
+            _LOGGER.debug(f"[STATE-COORD] Shutter BEFORE: position={old_position}, moving={shutter.is_moving}")
             
             # Update position if provided (convert from Exalus to HA scale)
+            # movement state (is_moving) is tracked by _on_device_tasks_changed, not from here
             if position_exalus is not None:
                 shutter.current_position = exalus_to_ha_position(position_exalus)
                 _LOGGER.debug(f"[STATE-COORD] Position updated: Exalus {position_exalus} → HA {shutter.current_position}")
+                _LOGGER.debug(f"[LIVE] position updated: shutter={unique_id}, ha_position={shutter.current_position}")
             else:
                 _LOGGER.debug(f"[STATE-COORD] Position is None, not updating")
-            
-            # Update moving state
-            shutter.is_moving = task_execution != 0
             
             _LOGGER.debug(f"[STATE-COORD] Shutter AFTER: position={shutter.current_position}, moving={shutter.is_moving}")
             
@@ -228,6 +227,49 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             
         except Exception as e:
             _LOGGER.error(f"[STATE-COORD] Error: {e}", exc_info=True)
+    
+    async def _on_device_tasks_changed(self, tasks_data: list):
+        """Handle device tasks changed event from WebSocket.
+        
+        This is the official source of truth for movement state (is_moving).
+        
+        Args:
+            tasks_data: List of "DeviceGuid;Channel" strings for currently executing tasks.
+                        Empty list means no tasks running — all blinds stopped.
+        """
+        try:
+            _LOGGER.debug(f"[LIVE] task event received: {tasks_data}")
+            
+            # Parse executing tasks into a set of unique_ids
+            executing = set()
+            for entry in tasks_data:
+                if ";" in str(entry):
+                    parts = str(entry).split(";", 1)
+                    guid = parts[0].strip()
+                    channel_str = parts[1].strip()
+                    try:
+                        channel = int(channel_str)
+                        executing.add(f"{guid}_{channel}")
+                    except ValueError:
+                        _LOGGER.debug(f"[LIVE] Could not parse channel from task entry: {entry}")
+            
+            if executing:
+                _LOGGER.debug(f"[LIVE] movement updated: executing={executing}")
+            else:
+                _LOGGER.debug(f"[LIVE] stop detected: no tasks running")
+            
+            changed = False
+            for uid, shutter in self._shutters.items():
+                new_moving = uid in executing
+                if shutter.is_moving != new_moving:
+                    shutter.is_moving = new_moving
+                    changed = True
+            
+            if changed:
+                self.async_set_updated_data(self._shutters)
+        
+        except Exception as e:
+            _LOGGER.error(f"[LIVE] Error handling tasks event: {e}", exc_info=True)
     
     async def _on_session_logout(self):
         """Handle session logout event (producer-aligned).

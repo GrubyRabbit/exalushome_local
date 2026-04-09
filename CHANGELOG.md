@@ -2,6 +2,17 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.0.19]
+
+### Fixed
+- Fix live blind state using official event model
+- Subscribe to /info/devices/tasks for movement state (is_moving)
+- is_opening/is_closing now correctly reflect blind movement in real time
+- Remove broken TaskExecution reading from state events (field does not exist in API)
+- Movement detected from /info/devices/tasks (list of "guid;channel" strings)
+- Stop detected when /info/devices/tasks fires with empty array
+- Position updates still come from /info/devices/device/state/changed as before
+
 ## [v0.0.18] - 2026-04-08
 
 ### Fixed
