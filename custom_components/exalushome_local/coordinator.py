@@ -1,6 +1,5 @@
 """Coordinator for ExalusHome Local integration."""
 
-import asyncio
 import logging
 from datetime import timedelta
 from typing import Dict, List, Optional
@@ -52,7 +51,6 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         self._serial = serial
         self._shutters: Dict[str, ShutterDevice] = {}
         self._startup_complete = False
-        self._stop_timers: Dict[str, asyncio.TimerHandle] = {}  # uid -> pending stop timer
         
     async def async_config_entry_first_refresh(self) -> bool:
         """Perform first refresh on config entry setup."""
@@ -166,27 +164,20 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         self._shutters = updated_shutters
         _LOGGER.debug(f"[UPDATE] Shutters after merge: {len(self._shutters)} total")
     
-    
-    # Inactivity window: if no BlindPosition event arrives within this many seconds,
-    # the shutter is considered stopped. Runtime evidence shows tasks=[] and StateReliability
-    # are both unreliable for stop detection on this controller.
-    _POSITION_INACTIVITY_STOP_SECONDS = 2.0
 
     async def _on_device_state_changed(self, state_data: Dict):
         """Handle device state changed event from WebSocket.
 
-        Position updates come from BlindPosition events.
-        Stop detection uses per-shutter inactivity timer: if no new position event
-        arrives within _POSITION_INACTIVITY_STOP_SECONDS, the shutter is stopped.
+        Updates shutter position from BlindPosition events.
+        No stop detection here — movement state is set by /info/devices/tasks.
         """
         try:
             device_guid = state_data.get("DeviceGuid")
             state_info = state_data.get("state", {})
             channel = state_info.get("Channel")
             position_exalus = state_info.get("Position")
-            state_reliability = state_info.get("StateReliability")
 
-            _LOGGER.debug(f"[STATE-COORD] DeviceGuid={device_guid}, Channel={channel}, Position={position_exalus}, StateReliability={state_reliability}")
+            _LOGGER.debug(f"[STATE-COORD] DeviceGuid={device_guid}, Channel={channel}, Position={position_exalus}")
 
             if device_guid is None or channel is None:
                 _LOGGER.debug(f"[STATE-COORD] SKIP: missing DeviceGuid or Channel")
@@ -199,41 +190,12 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
 
             shutter = self._shutters[unique_id]
 
-            # Update position
             if position_exalus is not None:
                 shutter.current_position = exalus_to_ha_position(position_exalus)
-                if shutter.is_moving:
-                    _LOGGER.debug(
-                        f"[LIVE-POS] intermediate position event: "
-                        f"shutter={unique_id}, Exalus={position_exalus} → HA={shutter.current_position}"
-                    )
-                else:
-                    _LOGGER.debug(
-                        f"[LIVE-POS] final position event: "
-                        f"shutter={unique_id}, Exalus={position_exalus} → HA={shutter.current_position}"
-                    )
-
-            # Per-shutter inactivity stop timer:
-            # Every BlindPosition event cancels and restarts the timer.
-            # When the timer fires without a new event, movement has stopped.
-            if unique_id in self._stop_timers:
-                self._stop_timers[unique_id].cancel()
-
-            def _inactivity_stop(u=unique_id):
-                self._stop_timers.pop(u, None)
-                s = self._shutters.get(u)
-                if s and s.is_moving:
-                    _LOGGER.debug(f"[LIVE] stop detected from BlindPosition inactivity: {u}")
-                    s.is_moving = False
-                    self.async_set_updated_data(self._shutters)
-
-            self._stop_timers[unique_id] = self.hass.loop.call_later(
-                self._POSITION_INACTIVITY_STOP_SECONDS, _inactivity_stop
-            )
-            _LOGGER.debug(
-                f"[LIVE] inactivity stop timer reset for {unique_id} "
-                f"(fires in {self._POSITION_INACTIVITY_STOP_SECONDS}s)"
-            )
+                _LOGGER.debug(
+                    f"[LIVE-POS] position updated: shutter={unique_id}, "
+                    f"Exalus={position_exalus} → HA={shutter.current_position}, moving={shutter.is_moving}"
+                )
 
             self.async_set_updated_data(self._shutters)
 
@@ -243,15 +205,14 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
     async def _on_device_tasks_changed(self, tasks_data: list):
         """Handle device tasks changed event from WebSocket.
 
-        Used ONLY to detect start of movement (non-empty tasks => is_moving=True).
-        Stop detection is handled exclusively by BlindPosition inactivity timer.
-        tasks=[] is ignored — it is unreliable even with debounce on this controller.
+        Non-empty tasks => is_moving=True for matching shutters (movement started).
+        tasks=[] is ignored — not a confirmed stop signal on this controller.
         """
         try:
             _LOGGER.debug(f"[LIVE] task event received: {tasks_data}")
 
             if not tasks_data:
-                _LOGGER.debug(f"[LIVE] task event empty — ignored (stop detection uses inactivity timer)")
+                _LOGGER.debug(f"[LIVE] task event empty — ignored")
                 return
 
             # Parse executing tasks — split on ";" and take first two non-empty tokens
