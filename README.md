@@ -1,6 +1,6 @@
 # ExalusHome Local — Home Assistant Integration
 
-"Cała integracja napisana z pomocą agentów AI, jej głównym winowajcą jest copilot. Projekt powstał z powodu nieudolności producenta i niedotrzymanych obietnic. Long story short - po prawie 2 latach czekania, zdecydowałem się zrobić to samemu, bo nigdy nie doczekali byśmy się sterowania tym badziewiem w HA".
+"Cała integracja napisana z pomocą agentów AI, jej głównym winowajcą jest copilot. Projekt powstał z powodu niedotrzymanych obietnic. Long story short - po prawie 2 latach czekania, zdecydowałem się zrobić to samemu, bo nigdy nie doczekali byśmy się sterowania tymi roletami w HA".
 
 Local network integration for **Exalus** Tr7 433mhz smart home controllers.  
 Controls roller shutters (blinds) directly over LAN — no cloud.
@@ -24,7 +24,7 @@ Controls roller shutters (blinds) directly over LAN — no cloud.
 ### HACS (recommended)
 
 1. Add this repository as a custom repository in HACS:  
-   `https://github.com/GrubyRabbit/hatest`  
+   `https://github.com/GrubyRabbit/exalushome_local`  
    Category: **Integration**
 2. Install **ExalusHome Local**
 3. Restart Home Assistant
