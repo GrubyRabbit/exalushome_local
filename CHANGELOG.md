@@ -2,14 +2,11 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
-## [v0.1.2]
+## [v0.1.3]
 
 ### Fixed
-- Fix live movement parsing from /info/devices/tasks
-- Support runtime task format with trailing semicolon (guid;channel;)
-- Empty /info/devices/tasks correctly stops movement (is_moving=False) for all moving blinds
-- Remove StateReliability-based movement logic (not valid in this runtime)
-- /info/devices/tasks is now the sole authoritative movement source
+- Preserve movement direction for set_cover_position
+- Improve opening/closing state while moving to a target position: compare target vs current position to derive OPEN/CLOSE direction
 
 ## [v0.1.0]
 

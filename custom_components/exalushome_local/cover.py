@@ -215,8 +215,19 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         )
         
         if success:
-            # Mark as moving; wait for WebSocket state update for final position
+            # Derive direction from target vs current position and store as last command.
+            # This allows is_opening / is_closing to reflect direction while moving.
+            current = self._shutter.current_position  # HA scale: 0=closed, 100=open
+            if current is not None and position_ha > current:
+                self._last_command = BLIND_CONTROL_OPEN   # moving toward open
+            elif current is not None and position_ha < current:
+                self._last_command = BLIND_CONTROL_CLOSE  # moving toward closed
+            # if equal, keep existing _last_command (no movement)
             self._shutter.is_moving = True
+            _LOGGER.debug(
+                f"[STATE-COVER] set_position: target={position_ha}, current={current}, "
+                f"last_cmd={self._last_command}"
+            )
             self.async_write_ha_state()
         else:
             _LOGGER.error(f"Failed to set position for {self._shutter.unique_id}")
