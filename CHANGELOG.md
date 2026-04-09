@@ -1,15 +1,11 @@
 # Changelog
 
-All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
+## 1.0.0
 
-## [v0.1.9]
-
-### Changed
-- Removed all custom stop-detection logic (generation counters, asyncio.sleep(0), deferred tasks)
-- Movement state now directly mirrors official library DeviceChannel._onTasksExecutionChangedEvent
-- tasks non-empty: is_moving=True for shutters in the executing set
-- tasks []: is_moving=False for all shutters not in the executing set (direct, no deferral)
-- Position updates from BlindPosition events only, no inference
+- Stable release
+- Full alignment with Exalus webapp behavior (1:1)
+- Removed experimental and custom logic
+- Documentation simplified
 
 ## [v0.1.0]
 
