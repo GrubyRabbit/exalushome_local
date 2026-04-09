@@ -1,7 +1,9 @@
 # ExalusHome Local — Home Assistant Integration
 
-Local network integration for **Exalus** smart home controllers.  
-Controls roller shutters (blinds) directly over LAN — no cloud required.
+"Cała integracja napisana z pomocą agentów AI, jej głównym winowajcą jest copilot. Projekt powstał z powodu nieudolności producenta i niedotrzymanych obietnic. Long story short - po prawie 2 latach czekania, zdecydowałem się zrobić to samemu, bo nigdy nie doczekali byśmy się sterowania tym badziewiem w HA".
+
+Local network integration for **Exalus** Tr7 433mhz smart home controllers.  
+Controls roller shutters (blinds) directly over LAN — no cloud.
 
 > **State and movement reflect the official Exalus web application 1:1**
 
@@ -11,7 +13,7 @@ Controls roller shutters (blinds) directly over LAN — no cloud required.
 
 - Local control of Exalus roller shutters (blinds)
 - Open / close / stop / set position
-- Live position updates from the controller
+- Live position updates from the controller (this is not live, exalus has limited information on this)
 - Live movement state (opening / closing / stopped)
 - Automatic reconnect on session loss
 
@@ -48,7 +50,6 @@ Controls roller shutters (blinds) directly over LAN — no cloud required.
 
 ## Notes
 
-- Requires the Exalus controller to be reachable on the local network
+- Requires the Exalus controller Tr7 to be reachable on the local network (set static address IP)
 - Behavior depends on the Exalus local API — no artificial state simulation
 - Only roller shutter (blind) channels are exposed as cover entities
-
