@@ -167,20 +167,17 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         _LOGGER.debug(f"[UPDATE] Shutters after merge: {len(self._shutters)} total")
     
     
+    # Inactivity window: if no BlindPosition event arrives within this many seconds,
+    # the shutter is considered stopped. Runtime evidence shows tasks=[] and StateReliability
+    # are both unreliable for stop detection on this controller.
+    _POSITION_INACTIVITY_STOP_SECONDS = 2.0
+
     async def _on_device_state_changed(self, state_data: Dict):
         """Handle device state changed event from WebSocket.
-        
-        Args:
-            state_data: State change data from /info/devices/device/state/changed with DataType=BlindPosition
-                Structure from library:
-                - DeviceGuid: device GUID
-                - DataType: "BlindPosition" (filtered by client)
-                - state: object containing:
-                  - Channel: channel number
-                  - Position: blind position (Exalus scale)
-                  - RawPosition: raw position value
-                  - StateReliability: state reliability enum
-                  - Time: timestamp
+
+        Position updates come from BlindPosition events.
+        Stop detection uses per-shutter inactivity timer: if no new position event
+        arrives within _POSITION_INACTIVITY_STOP_SECONDS, the shutter is stopped.
         """
         try:
             device_guid = state_data.get("DeviceGuid")
@@ -188,78 +185,74 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             channel = state_info.get("Channel")
             position_exalus = state_info.get("Position")
             state_reliability = state_info.get("StateReliability")
-            
-            _LOGGER.debug(f"[STATE-COORD] Callback invoked")
-            _LOGGER.debug(f"[STATE-COORD] DeviceGuid={device_guid}")
-            _LOGGER.debug(f"[STATE-COORD] Channel={channel}")
-            _LOGGER.debug(f"[STATE-COORD] Position={position_exalus}")
-            _LOGGER.debug(f"[LIVE] StateReliability received: {state_reliability}")
-            
+
+            _LOGGER.debug(f"[STATE-COORD] DeviceGuid={device_guid}, Channel={channel}, Position={position_exalus}, StateReliability={state_reliability}")
+
             if device_guid is None or channel is None:
                 _LOGGER.debug(f"[STATE-COORD] SKIP: missing DeviceGuid or Channel")
                 return
-            
-            # Find matching shutter
+
             unique_id = f"{device_guid}_{channel}"
-            _LOGGER.debug(f"[STATE-COORD] Looking for shutter with unique_id={unique_id}")
-            _LOGGER.debug(f"[STATE-COORD] Available shutters: {list(self._shutters.keys())}")
-            
             if unique_id not in self._shutters:
-                _LOGGER.debug(f"[STATE-COORD] SKIP: Shutter not found")
+                _LOGGER.debug(f"[STATE-COORD] SKIP: Shutter {unique_id} not found")
                 return
-            
+
             shutter = self._shutters[unique_id]
-            old_position = shutter.current_position
-            old_moving = shutter.is_moving
-            
-            _LOGGER.debug(f"[STATE-COORD] Shutter BEFORE: position={old_position}, moving={old_moving}")
-            
-            # Update position if provided (convert from Exalus to HA scale)
+
+            # Update position
             if position_exalus is not None:
                 shutter.current_position = exalus_to_ha_position(position_exalus)
                 if shutter.is_moving:
                     _LOGGER.debug(
-                        f"[LIVE-POS] intermediate position event received: "
-                        f"shutter={unique_id}, Exalus={position_exalus} → HA={shutter.current_position} (blind is moving)"
+                        f"[LIVE-POS] intermediate position event: "
+                        f"shutter={unique_id}, Exalus={position_exalus} → HA={shutter.current_position}"
                     )
                 else:
                     _LOGGER.debug(
-                        f"[LIVE-POS] final position event received: "
-                        f"shutter={unique_id}, Exalus={position_exalus} → HA={shutter.current_position} (blind stopped)"
+                        f"[LIVE-POS] final position event: "
+                        f"shutter={unique_id}, Exalus={position_exalus} → HA={shutter.current_position}"
                     )
-                _LOGGER.debug(f"[LIVE-POS] position updated in coordinator: shutter={unique_id}, ha_position={shutter.current_position}")
-            else:
-                _LOGGER.debug(f"[STATE-COORD] Position is None, not updating")
-            
-            # Movement state is driven by /info/devices/tasks events, not StateReliability.
-            # Runtime evidence: StateReliability=0 even during active movement in this controller.
-            _LOGGER.debug(f"[STATE-COORD] StateReliability={state_reliability} (not used for movement)")
-            
-            _LOGGER.debug(f"[STATE-COORD] Shutter AFTER: position={shutter.current_position}, moving={shutter.is_moving}")
-            
-            # Trigger coordinator update to notify entities
+
+            # Per-shutter inactivity stop timer:
+            # Every BlindPosition event cancels and restarts the timer.
+            # When the timer fires without a new event, movement has stopped.
+            if unique_id in self._stop_timers:
+                self._stop_timers[unique_id].cancel()
+
+            def _inactivity_stop(u=unique_id):
+                self._stop_timers.pop(u, None)
+                s = self._shutters.get(u)
+                if s and s.is_moving:
+                    _LOGGER.debug(f"[LIVE] stop detected from BlindPosition inactivity: {u}")
+                    s.is_moving = False
+                    self.async_set_updated_data(self._shutters)
+
+            self._stop_timers[unique_id] = self.hass.loop.call_later(
+                self._POSITION_INACTIVITY_STOP_SECONDS, _inactivity_stop
+            )
+            _LOGGER.debug(
+                f"[LIVE] inactivity stop timer reset for {unique_id} "
+                f"(fires in {self._POSITION_INACTIVITY_STOP_SECONDS}s)"
+            )
+
             self.async_set_updated_data(self._shutters)
-            _LOGGER.debug(f"[STATE-COORD] Coordinator updated")
-            
+
         except Exception as e:
             _LOGGER.error(f"[STATE-COORD] Error: {e}", exc_info=True)
     
     async def _on_device_tasks_changed(self, tasks_data: list):
         """Handle device tasks changed event from WebSocket.
 
-        Primary movement signal. Runtime format: 'guid;channel;' (trailing semicolon present).
-
-        Stop debounce: the controller flaps tasks=[] during a single movement.
-        Immediate stop on empty would prematurely drop is_moving.
-        Rule:
-        - Non-empty: mark matching shutters is_moving=True, cancel any pending stop timer
-        - Empty []: schedule delayed stop after STOP_DEBOUNCE_SECONDS for currently-moving shutters.
-          If a new non-empty task event arrives before the timer fires, the timer is cancelled.
+        Used ONLY to detect start of movement (non-empty tasks => is_moving=True).
+        Stop detection is handled exclusively by BlindPosition inactivity timer.
+        tasks=[] is ignored — it is unreliable even with debounce on this controller.
         """
-        STOP_DEBOUNCE_SECONDS = 0.8
-
         try:
             _LOGGER.debug(f"[LIVE] task event received: {tasks_data}")
+
+            if not tasks_data:
+                _LOGGER.debug(f"[LIVE] task event empty — ignored (stop detection uses inactivity timer)")
+                return
 
             # Parse executing tasks — split on ";" and take first two non-empty tokens
             # Runtime format: "bfacc80a-8549-432e-9165-0cf75e8b9a4a;1;" (trailing semicolon)
@@ -283,44 +276,17 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
                 else:
                     executing.add(f"{guid}_{channel}")
 
-            if executing:
-                _LOGGER.debug(f"[LIVE] movement updated: executing={executing}")
-                changed = False
-                for uid in executing:
-                    # Cancel any pending stop timer for this shutter
-                    if uid in self._stop_timers:
-                        self._stop_timers.pop(uid).cancel()
-                        _LOGGER.debug(f"[LIVE] stop timer cancelled for {uid} (new task arrived)")
-                    if uid in self._shutters and not self._shutters[uid].is_moving:
-                        self._shutters[uid].is_moving = True
-                        changed = True
-                if changed:
-                    self.async_set_updated_data(self._shutters)
-            else:
-                # Empty task list — schedule debounced stop for all currently-moving shutters
-                moving_uids = [uid for uid, s in self._shutters.items() if s.is_moving]
-                if not moving_uids:
-                    _LOGGER.debug(f"[LIVE] task event empty, no shutters currently moving — ignored")
-                    return
-                _LOGGER.debug(
-                    f"[LIVE] task event empty — scheduling stop in {STOP_DEBOUNCE_SECONDS}s "
-                    f"for {moving_uids}"
-                )
-                for uid in moving_uids:
-                    if uid in self._stop_timers:
-                        self._stop_timers[uid].cancel()
+            if not executing:
+                return
 
-                    def _do_stop(u=uid):
-                        self._stop_timers.pop(u, None)
-                        shutter = self._shutters.get(u)
-                        if shutter and shutter.is_moving:
-                            _LOGGER.debug(f"[LIVE] stop detected after debounce: {u}")
-                            shutter.is_moving = False
-                            self.async_set_updated_data(self._shutters)
-
-                    self._stop_timers[uid] = self.hass.loop.call_later(
-                        STOP_DEBOUNCE_SECONDS, _do_stop
-                    )
+            _LOGGER.debug(f"[LIVE] movement updated: executing={executing}")
+            changed = False
+            for uid in executing:
+                if uid in self._shutters and not self._shutters[uid].is_moving:
+                    self._shutters[uid].is_moving = True
+                    changed = True
+            if changed:
+                self.async_set_updated_data(self._shutters)
 
         except Exception as e:
             _LOGGER.error(f"[LIVE] Error handling tasks event: {e}", exc_info=True)

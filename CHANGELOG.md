@@ -2,13 +2,15 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
-## [v0.1.5]
+## [v0.1.6]
 
 ### Fixed
-- Fix movement stop flapping: /info/devices/tasks sends [] during movement then non-empty again
-- Add 800ms stop debounce: empty task list schedules delayed stop, cancelled if new task arrives
-- Prevents is_moving from dropping prematurely during live blind movement
-- Live position percentage and opening/closing now stable throughout full movement
+- Replace task-based stop detection with BlindPosition inactivity timer
+- Stop is now detected when no BlindPosition event arrives for 2.0s after last position update
+- tasks=[] is no longer used for stop detection (unreliable on this controller)
+- StateReliability is not used for stop detection (also unreliable on this controller)
+- /info/devices/tasks non-empty still sets is_moving=True (start-of-movement signal)
+- Live percentage and opening/closing now stable throughout full movement cycle
 
 ## [v0.1.0]
 
