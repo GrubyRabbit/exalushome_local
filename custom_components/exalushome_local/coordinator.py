@@ -52,6 +52,7 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
         self._serial = serial
         self._shutters: Dict[str, ShutterDevice] = {}
         self._startup_complete = False
+        self._stop_timers: Dict[str, asyncio.TimerHandle] = {}  # uid -> pending stop timer
         
     async def async_config_entry_first_refresh(self) -> bool:
         """Perform first refresh on config entry setup."""
@@ -245,16 +246,21 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
     
     async def _on_device_tasks_changed(self, tasks_data: list):
         """Handle device tasks changed event from WebSocket.
-        
+
         Primary movement signal. Runtime format: 'guid;channel;' (trailing semicolon present).
-        
-        Rules:
-        - Non-empty list: parse entries, set is_moving=True for matching shutters
-        - Empty list []: set is_moving=False for all shutters currently marked as moving
+
+        Stop debounce: the controller flaps tasks=[] during a single movement.
+        Immediate stop on empty would prematurely drop is_moving.
+        Rule:
+        - Non-empty: mark matching shutters is_moving=True, cancel any pending stop timer
+        - Empty []: schedule delayed stop after STOP_DEBOUNCE_SECONDS for currently-moving shutters.
+          If a new non-empty task event arrives before the timer fires, the timer is cancelled.
         """
+        STOP_DEBOUNCE_SECONDS = 0.8
+
         try:
             _LOGGER.debug(f"[LIVE] task event received: {tasks_data}")
-            
+
             # Parse executing tasks — split on ";" and take first two non-empty tokens
             # Runtime format: "bfacc80a-8549-432e-9165-0cf75e8b9a4a;1;" (trailing semicolon)
             executing = set()
@@ -276,26 +282,46 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
                             _LOGGER.debug(f"[LIVE] channel=0 expansion: marking {uid} as executing")
                 else:
                     executing.add(f"{guid}_{channel}")
-            
-            changed = False
-            
+
             if executing:
                 _LOGGER.debug(f"[LIVE] movement updated: executing={executing}")
+                changed = False
                 for uid in executing:
+                    # Cancel any pending stop timer for this shutter
+                    if uid in self._stop_timers:
+                        self._stop_timers.pop(uid).cancel()
+                        _LOGGER.debug(f"[LIVE] stop timer cancelled for {uid} (new task arrived)")
                     if uid in self._shutters and not self._shutters[uid].is_moving:
                         self._shutters[uid].is_moving = True
                         changed = True
+                if changed:
+                    self.async_set_updated_data(self._shutters)
             else:
-                # Empty task list = no tasks running = all blinds stopped
-                _LOGGER.debug(f"[LIVE] stop detected: no tasks running")
-                for uid, shutter in self._shutters.items():
-                    if shutter.is_moving:
-                        shutter.is_moving = False
-                        changed = True
-            
-            if changed:
-                self.async_set_updated_data(self._shutters)
-        
+                # Empty task list — schedule debounced stop for all currently-moving shutters
+                moving_uids = [uid for uid, s in self._shutters.items() if s.is_moving]
+                if not moving_uids:
+                    _LOGGER.debug(f"[LIVE] task event empty, no shutters currently moving — ignored")
+                    return
+                _LOGGER.debug(
+                    f"[LIVE] task event empty — scheduling stop in {STOP_DEBOUNCE_SECONDS}s "
+                    f"for {moving_uids}"
+                )
+                for uid in moving_uids:
+                    if uid in self._stop_timers:
+                        self._stop_timers[uid].cancel()
+
+                    def _do_stop(u=uid):
+                        self._stop_timers.pop(u, None)
+                        shutter = self._shutters.get(u)
+                        if shutter and shutter.is_moving:
+                            _LOGGER.debug(f"[LIVE] stop detected after debounce: {u}")
+                            shutter.is_moving = False
+                            self.async_set_updated_data(self._shutters)
+
+                    self._stop_timers[uid] = self.hass.loop.call_later(
+                        STOP_DEBOUNCE_SECONDS, _do_stop
+                    )
+
         except Exception as e:
             _LOGGER.error(f"[LIVE] Error handling tasks event: {e}", exc_info=True)
     

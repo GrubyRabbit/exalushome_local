@@ -2,13 +2,13 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
-## [v0.1.4]
+## [v0.1.5]
 
-### Improved
-- Improve live blind percentage updates during movement
-- Position update pipeline already applies every event immediately with no throttling
-- Add [LIVE-POS] diagnostic logs to distinguish intermediate vs final position events
-- Apply intermediate position updates immediately when provided by local API
+### Fixed
+- Fix movement stop flapping: /info/devices/tasks sends [] during movement then non-empty again
+- Add 800ms stop debounce: empty task list schedules delayed stop, cancelled if new task arrives
+- Prevents is_moving from dropping prematurely during live blind movement
+- Live position percentage and opening/closing now stable throughout full movement
 
 ## [v0.1.0]
 
