@@ -216,8 +216,17 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             # Update position if provided (convert from Exalus to HA scale)
             if position_exalus is not None:
                 shutter.current_position = exalus_to_ha_position(position_exalus)
-                _LOGGER.debug(f"[STATE-COORD] Position updated: Exalus {position_exalus} → HA {shutter.current_position}")
-                _LOGGER.debug(f"[LIVE] position updated: shutter={unique_id}, ha_position={shutter.current_position}")
+                if shutter.is_moving:
+                    _LOGGER.debug(
+                        f"[LIVE-POS] intermediate position event received: "
+                        f"shutter={unique_id}, Exalus={position_exalus} → HA={shutter.current_position} (blind is moving)"
+                    )
+                else:
+                    _LOGGER.debug(
+                        f"[LIVE-POS] final position event received: "
+                        f"shutter={unique_id}, Exalus={position_exalus} → HA={shutter.current_position} (blind stopped)"
+                    )
+                _LOGGER.debug(f"[LIVE-POS] position updated in coordinator: shutter={unique_id}, ha_position={shutter.current_position}")
             else:
                 _LOGGER.debug(f"[STATE-COORD] Position is None, not updating")
             

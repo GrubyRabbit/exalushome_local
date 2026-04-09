@@ -2,11 +2,13 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
-## [v0.1.3]
+## [v0.1.4]
 
-### Fixed
-- Preserve movement direction for set_cover_position
-- Improve opening/closing state while moving to a target position: compare target vs current position to derive OPEN/CLOSE direction
+### Improved
+- Improve live blind percentage updates during movement
+- Position update pipeline already applies every event immediately with no throttling
+- Add [LIVE-POS] diagnostic logs to distinguish intermediate vs final position events
+- Apply intermediate position updates immediately when provided by local API
 
 ## [v0.1.0]
 
