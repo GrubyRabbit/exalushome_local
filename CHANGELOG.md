@@ -2,6 +2,15 @@
 
 All notable changes to ExalusHome Local Home Assistant integration will be documented in this file.
 
+## [v0.1.1]
+
+### Fixed
+- Derive blind movement from official StateReliability field in BlindPosition state events
+- StateReliability=1 (Unconfident) = blind is moving; StateReliability=0 (Confident) = blind stopped
+- Improve opening/closing detection: is_moving now updates correctly during movement
+- Stop relying on empty task events as the primary stop signal
+- Empty /info/devices/tasks events no longer override StateReliability-based stop detection
+
 ## [v0.1.0]
 
 ### Fixed
