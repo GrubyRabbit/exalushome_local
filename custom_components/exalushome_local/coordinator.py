@@ -221,21 +221,9 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
             else:
                 _LOGGER.debug(f"[STATE-COORD] Position is None, not updating")
             
-            # Derive movement state from StateReliability (official BlindPostionState field):
-            #   Unconfident (1) = position uncertain = blind is MOVING
-            #   Confident   (0) = position certain  = blind has STOPPED
-            # This is the primary movement signal per official library (IDeviceState.js).
-            STATE_RELIABILITY_UNCONFIDENT = 1
-            STATE_RELIABILITY_CONFIDENT = 0
-            
-            if state_reliability == STATE_RELIABILITY_UNCONFIDENT:
-                shutter.is_moving = True
-                _LOGGER.debug(f"[LIVE] moving derived from StateReliability=1 (Unconfident): shutter={unique_id}")
-            elif state_reliability == STATE_RELIABILITY_CONFIDENT:
-                shutter.is_moving = False
-                _LOGGER.debug(f"[LIVE] final stop from StateReliability=0 (Confident): shutter={unique_id}")
-            else:
-                _LOGGER.debug(f"[STATE-COORD] StateReliability={state_reliability} — not updating is_moving")
+            # Movement state is driven by /info/devices/tasks events, not StateReliability.
+            # Runtime evidence: StateReliability=0 even during active movement in this controller.
+            _LOGGER.debug(f"[STATE-COORD] StateReliability={state_reliability} (not used for movement)")
             
             _LOGGER.debug(f"[STATE-COORD] Shutter AFTER: position={shutter.current_position}, moving={shutter.is_moving}")
             
@@ -249,50 +237,52 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
     async def _on_device_tasks_changed(self, tasks_data: list):
         """Handle device tasks changed event from WebSocket.
         
-        Supplementary signal for movement state.
-        Primary movement detection is StateReliability in _on_device_state_changed.
+        Primary movement signal. Runtime format: 'guid;channel;' (trailing semicolon present).
         
-        Rules (per official ParseDeviceTaskInfo behavior):
-        - Non-empty list: blinds ARE moving — set is_moving=True for matching shutters
-        - Empty list []: do NOT force is_moving=False; stop detection is handled by
-          StateReliability=0 (Confident) in position events, not by empty task lists.
-          Empty tasks at startup would incorrectly reset any movement set by commands.
+        Rules:
+        - Non-empty list: parse entries, set is_moving=True for matching shutters
+        - Empty list []: set is_moving=False for all shutters currently marked as moving
         """
         try:
             _LOGGER.debug(f"[LIVE] task event received: {tasks_data}")
             
-            if not tasks_data:
-                _LOGGER.debug(f"[LIVE] task event empty — not overriding StateReliability-based stop detection")
-                return
-            
-            # Non-empty: parse executing tasks — matches official ParseDeviceTaskInfo behavior:
-            # - Each entry is "DeviceGuid;Channel"
-            # - If Channel == 0: means ALL channels of that device are executing
+            # Parse executing tasks — split on ";" and take first two non-empty tokens
+            # Runtime format: "bfacc80a-8549-432e-9165-0cf75e8b9a4a;1;" (trailing semicolon)
             executing = set()
             for entry in tasks_data:
-                if ";" in str(entry):
-                    parts = str(entry).split(";", 1)
-                    guid = parts[0].strip()
-                    channel_str = parts[1].strip()
-                    try:
-                        channel = int(channel_str)
-                        if channel == 0:
-                            for uid in self._shutters:
-                                if uid.startswith(f"{guid}_"):
-                                    executing.add(uid)
-                                    _LOGGER.debug(f"[LIVE] channel=0 expansion: marking {uid} as executing")
-                        else:
-                            executing.add(f"{guid}_{channel}")
-                    except ValueError:
-                        _LOGGER.debug(f"[LIVE] Could not parse channel from task entry: {entry}")
-            
-            _LOGGER.debug(f"[LIVE] task movement confirmed: executing={executing}")
+                tokens = [t.strip() for t in str(entry).split(";") if t.strip()]
+                if len(tokens) < 2:
+                    _LOGGER.debug(f"[LIVE] Could not parse task entry (expected guid;channel): {entry!r}")
+                    continue
+                guid = tokens[0]
+                try:
+                    channel = int(tokens[1])
+                except ValueError:
+                    _LOGGER.debug(f"[LIVE] Could not parse channel from task entry: {entry!r}")
+                    continue
+                if channel == 0:
+                    for uid in self._shutters:
+                        if uid.startswith(f"{guid}_"):
+                            executing.add(uid)
+                            _LOGGER.debug(f"[LIVE] channel=0 expansion: marking {uid} as executing")
+                else:
+                    executing.add(f"{guid}_{channel}")
             
             changed = False
-            for uid in executing:
-                if uid in self._shutters and not self._shutters[uid].is_moving:
-                    self._shutters[uid].is_moving = True
-                    changed = True
+            
+            if executing:
+                _LOGGER.debug(f"[LIVE] movement updated: executing={executing}")
+                for uid in executing:
+                    if uid in self._shutters and not self._shutters[uid].is_moving:
+                        self._shutters[uid].is_moving = True
+                        changed = True
+            else:
+                # Empty task list = no tasks running = all blinds stopped
+                _LOGGER.debug(f"[LIVE] stop detected: no tasks running")
+                for uid, shutter in self._shutters.items():
+                    if shutter.is_moving:
+                        shutter.is_moving = False
+                        changed = True
             
             if changed:
                 self.async_set_updated_data(self._shutters)
