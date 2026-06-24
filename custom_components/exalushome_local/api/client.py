@@ -87,6 +87,7 @@ class ExalusLocalClient:
         self._task_callbacks = []
         self._receive_task = None
         self._ping_task = None
+        self._restore_task: Optional[asyncio.Task] = None
         self._last_received_packet_time: Optional[float] = None
         self._pending_responses: Dict[str, asyncio.Future] = {}  # TransactionId -> Future
         self._session_login_event: Optional[asyncio.Event] = None
@@ -305,6 +306,52 @@ class ExalusLocalClient:
             _LOGGER.error(f"Session creation failed: {e}")
             return False
     
+    async def _restore_session_async(self) -> bool:
+        """Restore session by re-logging in with stored credentials.
+        
+        Implements producer SessionService.RestoreSessionAsync() pattern.
+        Prevents concurrent recovery attempts via shared _restore_task.
+        Multiple callers awaiting same recovery result.
+        
+        Returns:
+            True if restoration successful, False otherwise
+        """
+        # If recovery already in progress, await the same task
+        if self._restore_task and not self._restore_task.done():
+            _LOGGER.debug("[RECOVERY] Recovery already in progress, awaiting same task")
+            try:
+                return await self._restore_task
+            except Exception as e:
+                _LOGGER.error(f"[RECOVERY] Error awaiting recovery task: {e}")
+                return False
+        
+        # Start new recovery task
+        _LOGGER.warning("[RECOVERY] Starting session restoration")
+        self._restore_task = asyncio.create_task(self._do_restore_session())
+        try:
+            result = await self._restore_task
+            return result
+        except Exception as e:
+            _LOGGER.error(f"[RECOVERY] Recovery task failed: {e}")
+            return False
+    
+    async def _do_restore_session(self) -> bool:
+        """Execute session restoration (re-login with stored credentials).
+        
+        Called by _restore_session_async() as a task.
+        Returns immediately on success/failure without retrying.
+        """
+        try:
+            result = await self._create_session()
+            if result:
+                _LOGGER.info("[RECOVERY] Session restored successfully")
+            else:
+                _LOGGER.error("[RECOVERY] Session restoration failed")
+            return result
+        except Exception as e:
+            _LOGGER.error(f"[RECOVERY] Exception during session restoration: {e}")
+            return False
+    
     async def _receive_loop(self):
         """Receive loop for WebSocket messages."""
         try:
@@ -481,13 +528,19 @@ class ExalusLocalClient:
         device_guid: str,
         channel_number: int,
         command: int,
+        repeat: bool = True,
     ) -> bool:
         """Send command to device.
+        
+        Waits for response and detects Status=13 (UserIsNotLoggedIn).
+        Implements producer SendAndWaitForResponseWithRepeatAsync pattern.
+        One recovery attempt only (producer behavior).
         
         Args:
             device_guid: Device GUID
             channel_number: Channel number
             command: Command code (101=open, 102=close, 103=stop, or position 0-100)
+            repeat: If True, allow one recovery attempt on Status=13
         
         Returns:
             True if command sent successfully
@@ -498,8 +551,9 @@ class ExalusLocalClient:
         
         try:
             # Build IDataFrame with exact protocol format
+            transaction_id = str(uuid.uuid4())
             frame = {
-                "TransactionId": str(uuid.uuid4()),
+                "TransactionId": transaction_id,
                 "Resource": WEBSOCKET_RESOURCE_CONTROL,
                 "Method": METHOD_POST,
                 "Data": {
@@ -511,13 +565,42 @@ class ExalusLocalClient:
                 }
             }
             
+            # Create future for response (producer pattern)
+            response_future = asyncio.Future()
+            self._pending_responses[transaction_id] = response_future
+            
             msg = json.dumps(frame)
             await self.websocket.send(msg)
+            
+            # Wait for response with timeout (producer: 15000ms)
+            try:
+                response = await asyncio.wait_for(response_future, timeout=15.0)
+            except asyncio.TimeoutError:
+                self._pending_responses.pop(transaction_id, None)
+                _LOGGER.error(f"[RECOVERY] Command response timeout")
+                return False
+            
+            status = response.get("Status", STATUS_UNKNOWN_ERROR)
+            
+            # Producer behavior: detect Status=13, recover, retry once
+            if status == STATUS_USER_NOT_LOGGED_IN and repeat:
+                _LOGGER.warning("[RECOVERY] send_command: Status=13 detected")
+                if await self._restore_session_async():
+                    _LOGGER.info("[RECOVERY] Session restored, retrying command")
+                    return await self.send_command(
+                        device_guid, channel_number, command, repeat=False
+                    )
+                else:
+                    _LOGGER.error("[RECOVERY] Session recovery failed, command aborted")
+                    self._notify_logout()
+                    return False
+            
+            success = status == STATUS_OK
             _LOGGER.debug(
-                f"Command sent: device={device_guid}, channel={channel_number}, "
-                f"command={command}"
+                f"Command result: device={device_guid}, channel={channel_number}, "
+                f"command={command}, status={status}, success={success}"
             )
-            return True
+            return success
             
         except Exception as e:
             _LOGGER.error(f"Send command failed: {e}")
@@ -595,8 +678,12 @@ class ExalusLocalClient:
             except Exception as e:
                 _LOGGER.error(f"Task callback error: {e}")
     
-    async def fetch_devices(self) -> Dict[str, Device]:
+    async def fetch_devices(self, repeat: bool = True) -> Dict[str, Device]:
         """Fetch device list from controller.
+        
+        Args:
+            repeat: If True, allow one recovery attempt on Status=13.
+                   If False, do not retry.
         
         Returns:
             Dictionary of devices indexed by GUID
@@ -661,6 +748,16 @@ class ExalusLocalClient:
             # Check response status BEFORE accessing Data (library: DevicesService.js:777)
             status = response.get("Status", STATUS_UNKNOWN_ERROR)
             if status != STATUS_OK:
+                # Producer behavior: detect Status=13, recover, retry once
+                if status == STATUS_USER_NOT_LOGGED_IN and repeat:
+                    _LOGGER.warning("[RECOVERY] fetch_devices: Status=13 detected")
+                    if await self._restore_session_async():
+                        _LOGGER.info("[RECOVERY] Session restored, retrying device fetch")
+                        return await self.fetch_devices(repeat=False)
+                    else:
+                        _LOGGER.error("[RECOVERY] Session recovery failed")
+                        self._notify_logout()
+                        return {}
                 _LOGGER.error(
                     f"Device list request failed: Status={status} "
                     f"(USER_NOT_LOGGED_IN=13), Data={response.get('Data')}"

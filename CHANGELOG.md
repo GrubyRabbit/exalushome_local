@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+- Producer-aligned session recovery
+- Status=13 UserIsNotLoggedIn detection and handling
+- Automatic session restoration with stored credentials
+- Retry failed commands once after successful recovery
+- Command response handling aligned with producer behavior (15s timeout)
+- Prevents concurrent recovery attempts
+
 ## 1.0.0
 
 - First Stable release
