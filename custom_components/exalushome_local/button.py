@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from homeassistant.components.button import ButtonEntity
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -36,6 +37,7 @@ async def async_setup_entry(
 class ExalusHomeShutterMicroventilationButton(CoordinatorEntity, ButtonEntity):
     """Producer-aligned microventilation trigger for an ExalusHome shutter."""
 
+    _attr_has_entity_name = True
     _attr_icon = "mdi:window-shutter-alert"
 
     def __init__(self, coordinator: ExalusHomeLocalCoordinator, shutter: ShutterDevice):
@@ -49,9 +51,17 @@ class ExalusHomeShutterMicroventilationButton(CoordinatorEntity, ButtonEntity):
         return f"exalushome_local_{self._shutter.unique_id}_microventilation"
 
     @property
+    def device_info(self) -> DeviceInfo:
+        """Group under the same device as the cover entity for this shutter."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._shutter.unique_id)},
+            name=self._shutter.name,
+        )
+
+    @property
     def name(self) -> str:
-        """Return name of the button."""
-        return f"{self._shutter.name} Microventilation"
+        """Return the entity-name suffix; combined with device name by HA."""
+        return "Mikrowentylacja"
 
     @property
     def available(self) -> bool:

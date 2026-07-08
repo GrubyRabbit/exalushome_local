@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4
+
+- Fixed duplicated entity names for cover and microventilation button entities
+- Added proper Home Assistant device/entity naming
+- No changes to command logic or websocket handling
+
 ## 1.0.3
 
 - Added producer-confirmed microventilation button support

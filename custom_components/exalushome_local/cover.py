@@ -8,6 +8,7 @@ from homeassistant.components.cover import (
     CoverEntityFeature,
     CoverDeviceClass,
 )
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -47,7 +48,9 @@ async def async_setup_entry(
 
 class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
     """Representation of an ExalusHome shutter."""
-    
+
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator: ExalusHomeLocalCoordinator, shutter: ShutterDevice):
         """Initialize cover entity."""
         super().__init__(coordinator)
@@ -71,6 +74,14 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         """Return unique ID for entity."""
         return f"exalushome_local_{self._shutter.unique_id}"
 
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Group this entity under one device per shutter."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._shutter.unique_id)},
+            name=self._shutter.name,
+        )
+
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator.
 
@@ -84,9 +95,9 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         super()._handle_coordinator_update()
 
     @property
-    def name(self) -> str:
-        """Return name of the cover."""
-        return self._shutter.name
+    def name(self) -> str | None:
+        """Primary entity of the device — no suffix, avoids name duplication."""
+        return None
     
     @property
     def current_cover_position(self) -> Optional[int]:

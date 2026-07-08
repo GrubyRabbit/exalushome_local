@@ -98,8 +98,16 @@ class ShutterDevice:
     
     @property
     def name(self) -> str:
-        """Entity name for HA."""
-        return f"{self.device_name} {self.channel.name}"
+        """Device name for HA.
+
+        Omits the channel name when it duplicates the device name
+        (common for single-channel shutter controllers).
+        """
+        channel_name = self.channel.name.strip()
+        device_name = self.device_name.strip()
+        if not channel_name or channel_name == device_name:
+            return device_name
+        return f"{device_name} {channel_name}"
 
 
 @dataclass
