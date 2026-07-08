@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import (
 
 from .api.client import ExalusLocalClient
 from .api.models import Device, DeviceChannel, ShutterDevice, ControlFeature, DeviceState
-from .const import DEFAULT_STATE_POLLING_INTERVAL, exalus_to_ha_position, CONF_EMAIL, CONF_PASSWORD
+from .const import DEFAULT_STATE_POLLING_INTERVAL, exalus_to_ha_position, CONF_EMAIL, CONF_PASSWORD, BLIND_MICROVENTILATION_DATA
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -270,7 +270,16 @@ class ExalusHomeLocalCoordinator(DataUpdateCoordinator):
     ) -> bool:
         """Send command to device."""
         return await self.client.send_command(device_guid, channel_number, command)
-    
+
+    async def send_microventilation(self, device_guid: str, channel_number: int) -> bool:
+        """Trigger producer-captured microventilation (ControlFeature=13, Data=91)."""
+        return await self.client.send_command(
+            device_guid,
+            channel_number,
+            BLIND_MICROVENTILATION_DATA,
+            control_feature=ControlFeature.Microventilation,
+        )
+
     async def async_shutdown(self):
         """Shutdown coordinator."""
         await self.client.disconnect()

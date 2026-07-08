@@ -23,6 +23,7 @@ class ControlFeature(IntEnum):
     """Device control features."""
     Unknown = 0
     Blind = 3  # Roller shutter/blind control
+    Microventilation = 13  # Producer-captured microventilation command
 
 
 @dataclass
@@ -47,7 +48,8 @@ class DeviceChannel:
     name: str
     control_feature: ControlFeature = ControlFeature.Unknown
     available: bool = True
-    
+    supports_microventilation: bool = False
+
     def is_blind(self) -> bool:
         """Check if this channel is a blind/shutter."""
         return self.control_feature == ControlFeature.Blind
@@ -83,7 +85,12 @@ class ShutterDevice:
     current_position: int = 0  # HA scale: 0=closed, 100=open
     is_moving: bool = False
     available: bool = True
-    
+
+    @property
+    def supports_microventilation(self) -> bool:
+        """Check if this shutter's channel advertises IMicroventilation."""
+        return self.channel.supports_microventilation
+
     @property
     def unique_id(self) -> str:
         """Generate unique ID for HA entity."""

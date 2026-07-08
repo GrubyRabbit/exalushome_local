@@ -53,3 +53,4 @@ Controls roller shutters (blinds) directly over LAN — no cloud.
 - Requires the Exalus controller Tr7 to be reachable on the local network (set static address IP)
 - Behavior depends on the Exalus local API — no artificial state simulation
 - Only roller shutter (blind) channels are exposed as cover entities
+- State and position updates follow Exalus local API/WebApp behavior. Reported position may update with delay after movement finishes. The integration does not simulate or guess final position.

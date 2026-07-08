@@ -528,20 +528,22 @@ class ExalusLocalClient:
         device_guid: str,
         channel_number: int,
         command: int,
+        control_feature: int | ControlFeature = ControlFeature.Blind,
         repeat: bool = True,
     ) -> bool:
         """Send command to device.
-        
+
         Waits for response and detects Status=13 (UserIsNotLoggedIn).
         Implements producer SendAndWaitForResponseWithRepeatAsync pattern.
         One recovery attempt only (producer behavior).
-        
+
         Args:
             device_guid: Device GUID
             channel_number: Channel number
             command: Command code (101=open, 102=close, 103=stop, or position 0-100)
+            control_feature: ControlFeature value for the frame (default: Blind=3)
             repeat: If True, allow one recovery attempt on Status=13
-        
+
         Returns:
             True if command sent successfully
         """
@@ -559,7 +561,7 @@ class ExalusLocalClient:
                 "Data": {
                     "DeviceGuid": device_guid,
                     "Channel": channel_number,
-                    "ControlFeature": 3,  # Blind control
+                    "ControlFeature": int(control_feature),
                     "SequnceExecutionOrder": 0,
                     "Data": command  # 101=open, 102=close, 103=stop, or 0-100=position
                 }
@@ -588,7 +590,7 @@ class ExalusLocalClient:
                 if await self._restore_session_async():
                     _LOGGER.info("[RECOVERY] Session restored, retrying command")
                     return await self.send_command(
-                        device_guid, channel_number, command, repeat=False
+                        device_guid, channel_number, command, control_feature=control_feature, repeat=False
                     )
                 else:
                     _LOGGER.error("[RECOVERY] Session recovery failed, command aborted")
@@ -858,15 +860,17 @@ class ExalusLocalClient:
                             # Check if device has blind control capability
                             # Evidence: AvailableTasks contains "IBlindPosition" or "IBlindPositionSimple" for blind channels
                             is_blind = "IBlindPosition" in available_tasks or "IBlindPositionSimple" in available_tasks
-                            
+                            supports_microventilation = "IMicroventilation" in available_tasks
+
                             control_feature = ControlFeature.Blind if is_blind else ControlFeature.Unknown
-                            
+
                             channel = DeviceChannel(
                                 guid=f"{device_guid}_ch{ch_number}",
                                 number=ch_number,
                                 name=ch_name,
                                 control_feature=control_feature,
                                 available=True,
+                                supports_microventilation=supports_microventilation,
                             )
                             channel_list.append(channel)
                         except Exception as e:

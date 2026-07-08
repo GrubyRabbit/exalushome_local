@@ -33,21 +33,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up cover entities from config entry."""
-    host = config_entry.data.get("host")
-    serial = config_entry.data.get("serial")
-    pin = config_entry.data.get("pin")
-    email = config_entry.data.get("email")
-    password = config_entry.data.get("password")
-    
-    # Create coordinator
-    coordinator = ExalusHomeLocalCoordinator(hass, host, serial, pin, email, password)
-    await coordinator.async_config_entry_first_refresh()
-    
-    # Store coordinator in hass data
-    if DOMAIN not in hass.data:
-        hass.data[DOMAIN] = {}
-    hass.data[DOMAIN][config_entry.entry_id] = coordinator
-    
+    # Coordinator is created once in __init__.py and shared across platforms
+    coordinator = hass.data[DOMAIN][config_entry.entry_id]
+
     # Create cover entities for all shutters
     entities = []
     for unique_id, shutter in coordinator.data.items():

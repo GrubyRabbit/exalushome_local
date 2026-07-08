@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3
+
+- Added producer-confirmed microventilation button support
+- Uses captured Exalus WebApp payload: ControlFeature=13, Data=91
+- Adds shared coordinator setup for cover/button platforms
+- Adds README note about delayed position/state updates following Exalus WebApp behavior
+
 ## 1.0.2
 
 - Fixed Home Assistant Logbook spam caused by stale cover command state

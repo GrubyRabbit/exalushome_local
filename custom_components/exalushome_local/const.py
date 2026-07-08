@@ -28,6 +28,9 @@ BLIND_CONTROL_OPEN = 101
 BLIND_CONTROL_CLOSE = 102
 BLIND_CONTROL_STOP = 103
 
+# Microventilation — captured from Exalus WebApp DevTools (ControlFeature=13), not derived
+BLIND_MICROVENTILATION_DATA = 91
+
 # Position mapping
 # Exalus: 0 = open, 100 = closed
 # Home Assistant: 0 = closed, 100 = open
