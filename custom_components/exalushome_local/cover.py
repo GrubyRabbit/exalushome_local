@@ -65,7 +65,8 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
         super().__init__(coordinator)
         self._shutter = shutter
         self._last_command = None  # Track last command: 101=open, 102=close, 103=stop
-        
+        self._was_moving = shutter.is_moving  # Track movement edge to reset _last_command on stop
+
         # Set device class to shutter
         self._attr_device_class = CoverDeviceClass.SHUTTER
         
@@ -81,7 +82,19 @@ class ExalusHomeShutterCover(CoordinatorEntity, CoverEntity):
     def unique_id(self) -> str:
         """Return unique ID for entity."""
         return f"exalushome_local_{self._shutter.unique_id}"
-    
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator.
+
+        Reset _last_command once movement finishes so a stale direction
+        can't combine with a later unrelated is_moving toggle to produce
+        a spurious opening/closing state transition.
+        """
+        if self._was_moving and not self._shutter.is_moving:
+            self._last_command = None
+        self._was_moving = self._shutter.is_moving
+        super()._handle_coordinator_update()
+
     @property
     def name(self) -> str:
         """Return name of the cover."""

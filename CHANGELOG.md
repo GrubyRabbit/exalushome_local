@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- Fixed Home Assistant Logbook spam caused by stale cover command state
+- No functional changes to movement detection
+- Producer-aligned internal fix
+
 ## 1.0.1
 
 - Producer-aligned session recovery
