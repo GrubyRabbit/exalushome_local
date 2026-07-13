@@ -1,6 +1,6 @@
 # ExalusHome Local — Home Assistant Integration
 
-"Cała integracja napisana z pomocą agentów AI, jej głównym winowajcą jest copilot. Projekt powstał z powodu niedotrzymanych obietnic. Long story short - po prawie 2 latach czekania, zdecydowałem się zrobić to samemu, bo nigdy nie doczekali byśmy się sterowania tymi roletami w HA".
+"Cała integracja napisana za pomocą agentów AI. Projekt powstał z powodu niedotrzymanych obietnic. Long story short - po paru latach czekania, zdecydowałem się zrobić to samemu, bo jak widać na moim przykładzie nie doczekali byśmy się sterowania tymi roletami w HA".
 
 Local network integration for **Exalus** Tr7 433mhz smart home controllers.  
 Controls roller shutters (blinds) directly over LAN — no cloud.
@@ -12,8 +12,8 @@ Controls roller shutters (blinds) directly over LAN — no cloud.
 ## What it supports
 
 - Local control of Exalus roller shutters (blinds)
-- Open / close / stop / set position
-- Live position updates from the controller (this is not live, exalus has limited information on this)
+- Open / close / stop / set position / microventilation
+- Live position updates from the controller (this is not live as live you wish, exalus has limited information on this)
 - Live movement state (opening / closing / stopped)
 - Automatic reconnect on session loss
 
@@ -48,9 +48,11 @@ Controls roller shutters (blinds) directly over LAN — no cloud.
 
 ---
 
+<img width="1034" height="830" alt="tile cards with exalus shutters" src="https://github.com/user-attachments/assets/d98df673-22e3-4b09-ae4c-fc1b214bd002" />
+
 ## Notes
 
 - Requires the Exalus controller Tr7 to be reachable on the local network (set static address IP)
-- Behavior depends on the Exalus local API — no artificial state simulation
+- Behavior depends on the Exalus local API
 - Only roller shutter (blind) channels are exposed as cover entities
 - State and position updates follow Exalus local API/WebApp behavior. Reported position may update with delay after movement finishes. The integration does not simulate or guess final position.
