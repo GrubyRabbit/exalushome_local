@@ -50,7 +50,7 @@ Controls roller shutters (blinds) directly over LAN — no cloud.
 
 ## Tile cards
 
-<img width="1034" height="830" alt="tile cards with exalus shutters" src="https://github.com/user-attachments/assets/d98df673-22e3-4b09-ae4c-fc1b214bd002" />
+<img width="1044" height="1102" alt="tile cards with exalus shutters and microventilation" src="https://github.com/user-attachments/assets/a198c53d-227a-467b-9c81-d14bbead75e5" />
 
 ## Notes
 
