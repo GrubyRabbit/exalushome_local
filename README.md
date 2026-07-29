@@ -52,6 +52,15 @@ Controls roller shutters (blinds) directly over LAN — no cloud.
 
 <img width="1044" height="1102" alt="tile cards with exalus shutters and microventilation" src="https://github.com/user-attachments/assets/a198c53d-227a-467b-9c81-d14bbead75e5" />
 
+---
+
+## Security
+
+This integration never stores credentials in the repository.
+If you discover a security issue, please open a private GitHub Security Advisory or contact me before publishing details.
+
+---
+
 ## Notes
 
 - Requires the Exalus controller Tr7 to be reachable on the local network (set static address IP)
